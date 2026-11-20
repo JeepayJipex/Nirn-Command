@@ -1,0 +1,18 @@
+{
+  "modId": "NirnCommand",
+  "name": "Nirn Command",
+  "version": "0.2.0",
+  "minHost": "1.9.2",
+  "dev": false,
+  "views": {
+    "palette": {
+      "path": "views/palette/index.html",
+      "layer": "panel",
+      "fullscreen": true,
+      "hotkey": "Insert",
+      "hotkeyPause": true,
+      "prepaint": true,
+      "hitTest": "content"
+    }
+  }
+}

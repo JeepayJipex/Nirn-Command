@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nirn Command</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="root">
+    <main class="palette" role="dialog" aria-label="Nirn Command">
+      <header class="brand"><span class="mark">✦</span> NIRN COMMAND <span class="edition">PERSONAL BUILD · 0.2.0</span></header>
+      <div class="search-area">
+        <span class="search-icon">⌕</span>
+        <input id="query" type="search" autocomplete="off" spellcheck="false" placeholder="Spell, item, mod, place, command…" aria-label="Search commands" />
+        <kbd>ESC</kbd>
+      </div>
+      <div id="meta" class="meta">QUICK COMMANDS</div>
+      <section id="results" role="listbox" aria-label="Results"></section>
+      <footer>
+        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+        <span><kbd>↵</kbd> Execute</span><span><kbd>Ctrl</kbd><kbd>↵</kbd> Left hand</span><span><kbd>Ctrl</kbd><kbd>D</kbd> Favorite</span>
+        <span class="status" id="status">CONNECTING</span>
+      </footer>
+    </main>
+    <div class="hint">Search your inventory and known spells.</div>
+  </div>
+  <script src="./commands.js"></script>
+  <script src="./scanned-commands.js"></script>
+  <script src="./user-commands.js"></script>
+  <script src="./main.js"></script>
+</body>
+</html>

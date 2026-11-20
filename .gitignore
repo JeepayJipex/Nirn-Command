@@ -1,0 +1,4 @@
+build/
+dist/
+config.local.json
+node_modules/
