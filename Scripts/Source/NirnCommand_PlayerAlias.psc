@@ -521,7 +521,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             if item as Spell
                 kind = "spell"
             endif
-            string row = NirnCommandNative.CatalogEntry(kind, sendEpoch + ":" + i, PersistentKey(item, kind), item.GetName())
+            string row = NirnCommandNative.CatalogEntry(kind, sendEpoch + ":" + item.GetFormID(), PersistentKey(item, kind), item.GetName())
             payloadBytes += StringUtil.GetLength(row)
             if StringUtil.GetLength(batch) + StringUtil.GetLength(row) + 1 > 960 && batch != ""
                 Magelight.Call(sendView, "ncCatalogBatch", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + batch)
@@ -946,7 +946,7 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     string kind = StringUtil.Substring(payload, 0, first)
     int epoch = StringUtil.Substring(payload, first + 1, second - first - 1) as int
     int token = StringUtil.Substring(payload, second + 1) as int
-    if (epoch != _activeEpoch && epoch != _previousEpoch) || epoch == 0 || token < 0
+    if (epoch != _activeEpoch && epoch != _previousEpoch) || epoch == 0
         Debug.Trace("[NirnCommand] Stale catalog token")
         ReportAction(request, "unavailable")
         return
@@ -956,7 +956,11 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     if epoch == _previousEpoch
         targetSlot = _previousSlot
     endif
-    Form target = StorageUtil.FormListGet(player, "NirnCommand.Forms" + targetSlot, token)
+    Form target = Game.GetForm(token)
+    if !target || StorageUtil.FormListFind(player, "NirnCommand.Forms" + targetSlot, target) < 0
+        ReportAction(request, "unavailable")
+        return
+    endif
     if kind == "item" && target && player.GetItemCount(target) > 0 && ((target as Weapon) || (target as Armor) || (target as Potion))
         player.EquipItem(target)
         ReportAction(request, "sent")
