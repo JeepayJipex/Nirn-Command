@@ -36,6 +36,17 @@ int main()
         require(entry["action"]=="shortcut2:37:0", "wrong key");
         require(entry["targetForm"]=="Example.esp|800" && entry["targetScript"]=="ExampleQuest", "missing declared Papyrus target");
         require(entry["source"].get<std::string>().find("keybinds.json")!=std::string::npos,"missing source");
+        write(root / "MCM/Settings/keybinds.json", R"({"version":14,"keybinds":[
+          {"keycode":21,"modName":"Helmet Toggle 2","id":"HT_ManageHelmet"},
+          {"keycode":210,"modName":"UltimateImmersionToggle","id":"ToggleUI"}]})");
+        write(root / "MCM/Config/Helmet Toggle 2/keybinds.json", R"({"modName":"Helmet Toggle 2","keybinds":[
+          {"id":"HT_ManageHelmet","desc":"Equip or unequip headgear","action":{"type":"CallFunction","form":"Helmet Toggle 2.esp|800","scriptName":"HT_MCM","function":"PressHotkey"}}]})");
+        write(root / "MCM/Config/UltimateImmersionToggle/keybinds.json", R"({"modName":"UltimateImmersionToggle","keybinds":[
+          {"id":"ToggleUI","desc":"Toggle UI","action":{"type":"CallFunction","form":"UltimateImmersionToggle.esp|D63","scriptName":"Luca_HideUIConfigMenu","function":"HideHUD"}}]})");
+        auto observed=nirn::discover_mcm(root);
+        require(observed.size()==2,"observed MCM mappings were not retained");
+        require(nlohmann::json::parse(observed[0])["action"]=="shortcut2:21:0", "helmet shortcut changed");
+        require(nlohmann::json::parse(observed[1])["action"]=="shortcut2:210:0", "UI shortcut changed");
         write(root / "MCM/Settings/keybinds.json", "invalid");
         require(nirn::discover_mcm(root).empty(),"malformed settings must not create actions");
         fs::remove_all(root);
