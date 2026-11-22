@@ -254,13 +254,15 @@
   function transferFrame(payload) {
     const text=catalogFrame(payload); if(text===null) return null;
     const fields=text.split('|'); if(fields.length<4) return null;
-    const [generation,attempt,category]=fields;
+    const [generation,attempt,rawCategory]=fields;
+    const category=rawCategory.toLowerCase();
     if(`${generation}|${attempt}|${category}`!==catalogTransferKey) return null;
     return (catalogSession?catalogSession+'|':'')+generation+'|'+fields.slice(3).join('|');
   }
   window.ncTransferBegin = function(payload) {
     const text=catalogFrame(payload); if(text===null) return;
-    const [generation,attempt,category]=text.split('|');
+    const [generation,attempt,rawCategory]=text.split('|');
+    const category=String(rawCategory || '').toLowerCase();
     const number=Number(attempt);
     if(!Number.isSafeInteger(number) || number<catalogAttempt || !['spell','item'].includes(category)) return;
     if(number===catalogAttempt && catalogTransferKey && (category==='spell' || !catalogTransferKey.endsWith('|spell'))) return;
@@ -286,7 +288,8 @@
   }
   window.ncCatalogBegin = function(value) {
     const framed=catalogFrame(value); if(framed===null) return;
-    const [next,category]=framed.split('|');
+    const [next,rawCategory]=framed.split('|');
+    const category=rawCategory ? rawCategory.toLowerCase() : '';
     if(category && category!=='item' && category!=='spell') return;
     if(category==='spell') spellReceivedEpoch='';
     if(category==='item' && spellReceivedEpoch!==next) {
@@ -332,7 +335,7 @@
   window.ncCatalogComplete = function(value) { const framed=catalogFrame(value); if(framed===null) return; const [received,count]=framed.split('|'); if(received!==epoch) return; catalogTransferSerial++; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];epoch='';statusEl.textContent='Catalog transfer incomplete'; const session=catalogSession, transfer=catalogTransferSerial; setTimeout(()=>{if(session===catalogSession && transfer===catalogTransferSerial) requestCatalogSnapshot('incomplete transfer');},1000);return;} if(catalogCategory==='spell') { spellReceivedEpoch=epoch; watchCatalogTransfer(); } else catalogRetries=0; discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge && catalogCategory!=='spell') bridge.send('catalog','applied|' + (catalogSession?catalogSession+'|':'') + epoch + (catalogTransferKey ? '|'+catalogAttempt : '')); };
   window.ncAddEntry = function(payload) {
     const text=String(payload || ''), a=text.indexOf('|'), b=text.indexOf('|',a+1), c=text.indexOf('|',b+1);
-    if (a<0 || b<0 || c<0) return; const type=text.slice(0,a), token=text.slice(a+1,b), id=text.slice(b+1,c), name=text.slice(c+1);
+    if (a<0 || b<0 || c<0) return; const type=text.slice(0,a).toLowerCase(), token=text.slice(a+1,b), id=text.slice(b+1,c), name=text.slice(c+1);
     if (!name || !/^(item|spell)$/.test(type) || !token.startsWith(epoch + ':')) return;
     incoming.push({id:id || `session:${type}:${token}`, persistent:!!id, label:name, kind:type==='item'?'Item':'Spell',detail:type==='item'?'Inventory · equip or consume':'Known spell · right hand',action:`${type}:${token}`});
     if (!queued) { queued=true; requestAnimationFrame(()=>{queued=false; statusEl.textContent=`Loading ${incoming.length} entries`;}); }

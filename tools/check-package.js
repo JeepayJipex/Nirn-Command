@@ -31,5 +31,5 @@ if(![...entries.keys()].some(name=>name.startsWith('licenses/') && name.endsWith
 const group=24+esp.readUInt32LE(4),quest=group+24;
 if(seq.length!==4 || seq.readUInt32LE(0)!==esp.readUInt32LE(quest+12)) throw Error('SEQ does not reference the ESP quest');
 const manifest=JSON.parse(entries.get('Magelight/NirnCommand/manifest.json').toString('utf8'));
-if(manifest.version!=='0.3.2' || manifest.modId!=='NirnCommand' || manifest.views?.palette?.path!=='views/palette/index.html') throw Error('Invalid Magelight manifest');
+if(manifest.version!=='0.3.3' || manifest.modId!=='NirnCommand' || manifest.views?.palette?.path!=='views/palette/index.html') throw Error('Invalid Magelight manifest');
 console.log(`Archive has ${entries.size} entries; ESP, PEX, x64 DLL, SEQ, licenses and Magelight paths passed inspection.`);
