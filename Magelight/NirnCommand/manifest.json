@@ -1,7 +1,7 @@
 {
   "modId": "NirnCommand",
   "name": "Nirn Command",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "minHost": "1.9.2",
   "dev": false,
   "views": {

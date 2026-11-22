@@ -19,9 +19,12 @@ int _previousSlot
 int _uiEpoch
 float _lastChange
 float _lastScan
+float _lastSpellCheck
 float _lastDiscovery
+float _lastHandshake
 float _transferStarted
 int _transferEpoch
+int _transferAttempt
 int _hotkey
 int _hotkeyModifiers
 bool _keyHeld
@@ -48,6 +51,7 @@ Function Setup()
     _snapshotRequested = false
     _discoveryRequested = false
     _catalogSession = ""
+    _lastHandshake = 0.0
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
@@ -72,6 +76,7 @@ Function Setup()
     _fullScan = true
     StorageUtil.FormListClear(Game.GetPlayer(), "NirnCommand.Pending")
     _lastChange = 0.0
+    _lastSpellCheck = 0.0
     _lastDiscovery = Utility.GetCurrentRealTime() - 30.0
     RegisterForSingleUpdate(1.0)
     Connect()
@@ -82,12 +87,17 @@ Event OnUpdate()
         Connect()
     endif
     float now = Utility.GetCurrentRealTime()
+    if _viewId != 0 && !_domReady && now - _lastHandshake >= 5.0
+        _lastHandshake = now
+        Debug.Trace("[NirnCommand] Retrying catalog handshake view=" + _viewId)
+        Magelight.Call(_viewId, "ncBridgeReady", "")
+    endif
     bool ownPalette = Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId && _viewId != 0
     if !_scanning && !_sending && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
         if _dirty && now - _lastChange >= 0.5
             ScanCatalog()
-        elseif now - _lastScan >= 30.0
-            _lastScan = now
+        elseif now - _lastSpellCheck >= 30.0
+            _lastSpellCheck = now
             if SpellCatalogChanged()
                 ScanCatalog()
             endif
@@ -450,7 +460,18 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         if separator < 0 || StringUtil.Substring(strArg, 8, separator - 8) != _catalogSession
             return
         endif
-        int applied = StringUtil.Substring(strArg, separator + 1) as int
+        int attemptSeparator = StringUtil.Find(strArg, "|", separator + 1)
+        int applied = 0
+        if attemptSeparator >= 0
+            applied = StringUtil.Substring(strArg, separator + 1, attemptSeparator - separator - 1) as int
+            int acknowledgedAttempt = StringUtil.Substring(strArg, attemptSeparator + 1) as int
+            if acknowledgedAttempt != _transferAttempt || applied != _transferEpoch
+                Debug.Trace("[NirnCommand] Catalog acknowledgment rejected attempt=" + acknowledgedAttempt)
+                return
+            endif
+        else
+            applied = StringUtil.Substring(strArg, separator + 1) as int
+        endif
         if applied == _activeEpoch
             _uiEpoch = applied
             if applied == _transferEpoch
@@ -459,19 +480,26 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         endif
         return
     elseif StringUtil.Find(strArg, "ready|") == 0
-        _catalogSession = StringUtil.Substring(strArg, 6)
-        if _catalogSession == ""
+        string readySession = StringUtil.Substring(strArg, 6)
+        if readySession == ""
             return
         endif
+        if _domReady && _catalogSession == readySession
+            return
+        endif
+        _catalogSession = readySession
         _domReady = true
         Debug.Trace("[NirnCommand] Catalog ready session=" + _catalogSession + " epoch=" + _activeEpoch)
         SendCatalog()
         SendDiscovery()
         return
-    elseif strArg == "refresh"
+    elseif strArg == "refresh|" + _catalogSession && _catalogSession != ""
         _fullScan = true
         _dirty = true
         _lastChange = 0.0
+    elseif strArg != "snapshot|" + _catalogSession || _catalogSession == ""
+        Debug.Trace("[NirnCommand] Catalog request rejected session mismatch")
+        return
     endif
     SendCatalog()
 EndEvent
@@ -506,13 +534,19 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     float transferStarted = Utility.GetCurrentRealTime()
     _transferStarted = transferStarted
     _transferEpoch = sendEpoch
+    _transferAttempt += 1
+    int attempt = _transferAttempt
     int scanEpoch = _epoch
     int sendView = _viewId
     int viewGeneration = _viewGeneration
     string list = "NirnCommand.Forms" + sendSlot
     Actor player = Game.GetPlayer()
-    if sendView > 0
-        Magelight.Call(sendView, "ncCatalogBegin", _catalogSession + "|" + sendEpoch)
+    if commit
+        _previousEpoch = _activeEpoch
+        _previousSlot = _slot
+        _slot = sendSlot
+        _activeEpoch = sendEpoch
+        _lastScan = Utility.GetCurrentRealTime()
     endif
     int i = 0
     int total = StorageUtil.FormListCount(player, list)
@@ -520,9 +554,20 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     int batchIndex = 0
     int payloadBytes = 0
     string batch = ""
+    int categoryIndex = 0
+    while categoryIndex < 2 && scanEpoch == _epoch && sendView == _viewId && viewGeneration == _viewGeneration && _domReady
+    string category = "spell"
+    if categoryIndex == 1
+        category = "item"
+    endif
+    string transferPrefix = _catalogSession + "|" + sendEpoch + "|" + attempt + "|" + category + "|"
+    Magelight.Call(sendView, "ncTransferBegin", transferPrefix)
+    i = 0
+    batchIndex = 0
+    batch = ""
     while sendView > 0 && i < total && scanEpoch == _epoch && sendView == _viewId && viewGeneration == _viewGeneration && _domReady
         Form item = StorageUtil.FormListGet(player, list, i)
-        if item
+        if item && ((category == "spell" && (item as Spell)) || (category == "item" && !(item as Spell)))
             string kind = "item"
             if item as Spell
                 kind = "spell"
@@ -530,7 +575,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             string row = NirnCommandNative.CatalogEntry(kind, sendEpoch + ":" + item.GetFormID(), PersistentKey(item, kind), item.GetName())
             payloadBytes += StringUtil.GetLength(row)
             if StringUtil.GetLength(batch) + StringUtil.GetLength(row) + 1 > 960 && batch != ""
-                Magelight.Call(sendView, "ncCatalogBatch", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + batch)
+                Magelight.Call(sendView, "ncTransferBatch", transferPrefix + batchIndex + "|" + batch)
                 batchIndex += 1
                 batch = ""
             endif
@@ -538,7 +583,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
                 string[] fragments = NirnCommandNative.CatalogFragments(row)
                 int part = 0
                 while part < fragments.Length && scanEpoch == _epoch && viewGeneration == _viewGeneration && _domReady
-                    Magelight.Call(sendView, "ncCatalogFragment", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + part + "|" + fragments.Length + "|" + fragments[part])
+                    Magelight.Call(sendView, "ncTransferFragment", transferPrefix + batchIndex + "|" + part + "|" + fragments.Length + "|" + fragments[part])
                     batchIndex += 1
                     part += 1
                 endwhile
@@ -555,24 +600,18 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
         endif
     endwhile
     if scanEpoch == _epoch && sendView == _viewId && viewGeneration == _viewGeneration && _domReady
-        if commit
-            _previousEpoch = _activeEpoch
-            _previousSlot = _slot
-            _slot = sendSlot
-            _activeEpoch = sendEpoch
-            _lastScan = Utility.GetCurrentRealTime()
-        endif
-        if sendView > 0
             if batch != ""
-                Magelight.Call(sendView, "ncCatalogBatch", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + batch)
+                Magelight.Call(sendView, "ncTransferBatch", transferPrefix + batchIndex + "|" + batch)
                 batchIndex += 1
             endif
-            Magelight.Call(sendView, "ncCatalogComplete", _catalogSession + "|" + sendEpoch + "|" + batchIndex)
-            Debug.Trace("[NirnCommand] Catalog transfer entries=" + total + " batches=" + batchIndex + " payloadBytes=" + payloadBytes + " seconds=" + (Utility.GetCurrentRealTime() - transferStarted))
-        endif
-    elseif commit && scanEpoch == _epoch
+            Magelight.Call(sendView, "ncTransferComplete", transferPrefix + batchIndex)
+            Debug.Trace("[NirnCommand] Catalog publication complete session=" + _catalogSession + " epoch=" + sendEpoch + " category=" + category + " batches=" + batchIndex)
+            categoryIndex += 1
+    endif
+    endwhile
+    if categoryIndex < 2 && scanEpoch == _epoch
         Debug.Trace("[NirnCommand] Catalog publication interrupted epoch=" + sendEpoch + " view=" + sendView + " currentView=" + _viewId + " ready=" + _domReady)
-        _dirty = true
+        _snapshotRequested = true
     endif
     _sending = false
     if _snapshotRequested && _domReady
@@ -714,7 +753,8 @@ Function ScanCatalog()
     StorageUtil.FormListClear(player, "NirnCommand.Pending")
     int i = 0
     int total = 0
-    if _fullScan || _activeEpoch == 0
+    bool scanInventoryFully = _fullScan || _activeEpoch == 0
+    if scanInventoryFully
         _fullScan = false
         Form[] inventory = NirnCommandNative.InventoryForms(player)
         total = inventory.Length
@@ -758,6 +798,20 @@ Function ScanCatalog()
     float spellsStarted = Utility.GetCurrentRealTime()
     string spellList = "NirnCommand.ScanSpells"
     StorageUtil.FormListClear(player, spellList)
+    ; Inventory events do not require re-enumerating the player's spellbook.
+    ; Periodic spell checks call this function with an empty pending list.
+    bool cachedSpells = changed.Length > 0 && _activeEpoch != 0 && !scanInventoryFully
+    if cachedSpells
+        Form[] spells = StorageUtil.FormListToArray(player, "NirnCommand.SpellSnapshot")
+        i = 0
+        while i < spells.Length && scanEpoch == _epoch
+            if spells[i]
+                StorageUtil.FormListAdd(player, list, spells[i], false)
+                StorageUtil.FormListAdd(player, spellList, spells[i], false)
+            endif
+            i += 1
+        endwhile
+    else
     i = 0
     total = player.GetSpellCount()
     while i < total && scanEpoch == _epoch
@@ -787,7 +841,11 @@ Function ScanCatalog()
             endif
         endwhile
     endif
+    endif
     if scanEpoch == _epoch
+        if !cachedSpells
+            _lastSpellCheck = Utility.GetCurrentRealTime()
+        endif
         int spellCount = StorageUtil.FormListCount(player, spellList)
         int entryCount = StorageUtil.FormListCount(player, list)
         Debug.Trace("[NirnCommand] Catalog scan complete epoch=" + scanEpoch + " items=" + (entryCount - spellCount) + " spells=" + spellCount + " inventorySeconds=" + inventorySeconds + " spellsSeconds=" + (Utility.GetCurrentRealTime() - spellsStarted))
@@ -814,7 +872,7 @@ Function ScanCatalog()
             _scanning = false
         elseif !_sending && (!Magelight.IsUIModeActive() || Magelight.GetUIModeView() == _viewId)
             bool deltaPublished = false
-            if changed.Length > 0 && !SpellCatalogChanged()
+            if cachedSpells
                 deltaPublished = PublishInventoryDelta(changed, nextSlot, scanEpoch)
             endif
             if !deltaPublished

@@ -207,7 +207,7 @@
     }
     if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey') { if (entry.action === 'local:commands' && !commandsReady) {statusEl.textContent='Commands unavailable or still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : 'command');} return; }
     if (entry?.action === 'local:toggle-unavailable') { settings.showUnavailable=settings.showUnavailable===false; save('settings',settings); statusEl.textContent=settings.showUnavailable ? 'Unavailable actions shown' : 'Unavailable actions hidden'; render(); return; }
-    if (entry?.action === 'local:refresh') { if (bridge) { bridge.send('catalog','refresh'); statusEl.textContent='Loading…'; } return; }
+    if (entry?.action === 'local:refresh') { if (bridge) { catalogRetries=0; bridge.send('catalog',catalogSession ? 'refresh|'+catalogSession : 'refresh'); statusEl.textContent='Loading…'; } return; }
     if (!entry || !bridge) { statusEl.textContent='Bridge unavailable'; return; }
     if (!available(entry)) { statusEl.textContent=unavailableReason(entry); return; }
     const action=left && entry.action.startsWith('spell:') ? entry.action.replace('spell:','spellleft:') : entry.action;
@@ -232,15 +232,44 @@
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
   window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
   window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
-  let catalogSession='', catalogTransferSerial=0;
+  let catalogSession='', catalogTransferSerial=0, catalogRetries=0, spellReceivedEpoch='';
+  function requestCatalogSnapshot(reason) {
+    if (catalogRetries >= 1) {
+      statusEl.textContent='Catalog unavailable. Use Refresh catalog to retry.';
+      console.warn(`[NirnCommand] Catalog recovery stopped: ${reason}`);
+      return;
+    }
+    catalogRetries++;
+    console.warn(`[NirnCommand] Catalog recovery requested: ${reason}`);
+    if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
+  }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : ''; modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : ''; modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
     if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
     if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
   };
-  let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null, catalogProgress=0;
+  let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null, catalogProgress=0, catalogCategory='', catalogAttempt=0, catalogTransferKey='';
+  function transferFrame(payload) {
+    const text=catalogFrame(payload); if(text===null) return null;
+    const fields=text.split('|'); if(fields.length<4) return null;
+    const [generation,attempt,category]=fields;
+    if(`${generation}|${attempt}|${category}`!==catalogTransferKey) return null;
+    return (catalogSession?catalogSession+'|':'')+generation+'|'+fields.slice(3).join('|');
+  }
+  window.ncTransferBegin = function(payload) {
+    const text=catalogFrame(payload); if(text===null) return;
+    const [generation,attempt,category]=text.split('|');
+    const number=Number(attempt);
+    if(!Number.isSafeInteger(number) || number<catalogAttempt || !['spell','item'].includes(category)) return;
+    if(number===catalogAttempt && catalogTransferKey && (category==='spell' || !catalogTransferKey.endsWith('|spell'))) return;
+    catalogAttempt=number; catalogTransferKey=`${generation}|${attempt}|${category}`;
+    window.ncCatalogBegin((catalogSession?catalogSession+'|':'')+generation+'|'+category);
+  };
+  window.ncTransferBatch = function(payload) { const value=transferFrame(payload); if(value!==null) window.ncCatalogBatch(value); };
+  window.ncTransferFragment = function(payload) { const value=transferFrame(payload); if(value!==null) window.ncCatalogFragment(value); };
+  window.ncTransferComplete = function(payload) { const value=transferFrame(payload); if(value!==null) window.ncCatalogComplete(value); };
   function watchCatalogTransfer() {
     const serial=++catalogTransferSerial;
     catalogProgress=Date.now();
@@ -251,17 +280,31 @@
       catalogTransferSerial++; incoming=[]; catalogFragment=null; epoch='';
       statusEl.textContent='Catalog transfer timed out';
       console.warn('[NirnCommand] Catalog transfer timed out; requesting snapshot');
-      if(bridge) bridge.send('catalog','snapshot');
+      requestCatalogSnapshot('transfer timeout');
     }
     setTimeout(check,30000);
   }
-  window.ncCatalogBegin = function(value) { const framed=catalogFrame(value); if(framed===null) return; epoch=framed; incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); watchCatalogTransfer(); };
+  window.ncCatalogBegin = function(value) {
+    const framed=catalogFrame(value); if(framed===null) return;
+    const [next,category]=framed.split('|');
+    if(category && category!=='item' && category!=='spell') return;
+    if(category==='spell') spellReceivedEpoch='';
+    if(category==='item' && spellReceivedEpoch!==next) {
+      catalogTransferSerial++; epoch=''; incoming=[];
+      requestCatalogSnapshot('spell category missing');
+      return;
+    }
+    epoch=next; catalogCategory=category || '';
+    incoming=category ? discovered.filter(entry=>entry.kind!==(category==='spell'?'Spell':'Item'))
+      .map(entry=>({...entry,action:entry.action.replace(/^(item|spell):[^:]+:/,`$1:${next}:`)})) : [];
+    catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); watchCatalogTransfer();
+  };
   window.ncDeltaBegin = function(payload) {
     const framed=catalogFrame(payload); if(framed===null) return;
     const [base,next]=framed.split('|');
-    if(base!==epoch || !next) {catalogInvalid=true;if(bridge) bridge.send('catalog','snapshot');return;}
+    if(base!==epoch || !next) {catalogInvalid=true;requestCatalogSnapshot('generation mismatch');return;}
     incoming=discovered.map(entry=>({...entry,action:entry.action.replace(/^(item|spell):[^:]+:/,`$1:${next}:`)}));
-    epoch=next; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); watchCatalogTransfer();
+    epoch=next; catalogCategory=''; catalogTransferKey=''; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); watchCatalogTransfer();
   };
   window.ncDeltaRemove = function(payload) {
     const framed=catalogFrame(payload); if(framed===null) return;
@@ -286,7 +329,7 @@
       catalogFragment=null;
     }
   };
-  window.ncCatalogComplete = function(value) { const framed=catalogFrame(value); if(framed===null) return; const [received,count]=framed.split('|'); if(received!==epoch) return; catalogTransferSerial++; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];epoch='';statusEl.textContent='Catalog transfer incomplete'; if(bridge) setTimeout(()=>bridge.send('catalog','snapshot'),1000);return;} discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge) bridge.send('catalog','applied|' + (catalogSession?catalogSession+'|':'') + epoch); };
+  window.ncCatalogComplete = function(value) { const framed=catalogFrame(value); if(framed===null) return; const [received,count]=framed.split('|'); if(received!==epoch) return; catalogTransferSerial++; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];epoch='';statusEl.textContent='Catalog transfer incomplete'; const session=catalogSession, transfer=catalogTransferSerial; setTimeout(()=>{if(session===catalogSession && transfer===catalogTransferSerial) requestCatalogSnapshot('incomplete transfer');},1000);return;} if(catalogCategory==='spell') { spellReceivedEpoch=epoch; watchCatalogTransfer(); } else catalogRetries=0; discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge && catalogCategory!=='spell') bridge.send('catalog','applied|' + (catalogSession?catalogSession+'|':'') + epoch + (catalogTransferKey ? '|'+catalogAttempt : '')); };
   window.ncAddEntry = function(payload) {
     const text=String(payload || ''), a=text.indexOf('|'), b=text.indexOf('|',a+1), c=text.indexOf('|',b+1);
     if (a<0 || b<0 || c<0) return; const type=text.slice(0,a), token=text.slice(a+1,b), id=text.slice(b+1,c), name=text.slice(c+1);
