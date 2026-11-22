@@ -698,6 +698,10 @@ Function ScanCatalog()
             PublishCatalog(nextSlot, scanEpoch, true)
             if _activeEpoch == scanEpoch
                 StorageUtil.FormListCopy(player, "NirnCommand.SpellSnapshot", StorageUtil.FormListToArray(player, spellList))
+            else
+                ; A failed publication consumed the pending events. Reconcile from the player.
+                _fullScan = true
+                _dirty = true
             endif
             _scanning = false
         else
