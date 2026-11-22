@@ -307,7 +307,17 @@
     else if (event.key==='Enter' || event.code==='NumpadEnter') {event.preventDefault();execute(results[selected],event.ctrlKey);}
   },true);
   document.addEventListener('keyup',event=>{ if(editor?.isOpen()) editor.keyup(event); if(modifierBits[event.code]) heldModifiers &= ~modifierBits[event.code]; },true);
-  function open() { input.value=''; selected=0; render(); requestAnimationFrame(()=>input.focus()); statusEl.textContent=discovered.length ? 'Catalog ready' : 'Preparing catalog…'; }
+  function open() {
+    input.value=''; selected=0; render(); requestAnimationFrame(()=>input.focus());
+    statusEl.textContent=discovered.length ? 'Catalog ready' : 'Preparing catalog…';
+    const session=catalogSession;
+    setTimeout(()=>{
+      if(isOpen && session===catalogSession && !epoch && !discovered.length) {
+        statusEl.textContent='Catalog unavailable. Use Refresh catalog to retry.';
+        console.warn('[NirnCommand] No catalog transfer started');
+      }
+    },30000);
+  }
   if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; if(isOpen) open(); else {heldModifiers=0; if(editor?.isOpen()) editor.hide();} });
   render();
 })();

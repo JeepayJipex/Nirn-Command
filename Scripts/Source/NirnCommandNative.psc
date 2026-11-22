@@ -12,5 +12,6 @@ bool Function CommitCommandsWrite() Global Native
 int Function GetHotkey(int part) Global Native
 bool Function SetHotkey(int keyCode, int modifiers) Global Native
 Form[] Function InventoryForms(Actor player) Global Native
+bool Function IsHandSpell(Spell candidate) Global Native
 string Function CatalogEntry(string kind, string token, string id, string name) Global Native
 string[] Function CatalogFragments(string row) Global Native

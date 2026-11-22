@@ -47,6 +47,7 @@ Function Setup()
     _uiEpoch = 0
     _snapshotRequested = false
     _discoveryRequested = false
+    _catalogSession = ""
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
@@ -81,7 +82,8 @@ Event OnUpdate()
         Connect()
     endif
     float now = Utility.GetCurrentRealTime()
-    if !_scanning && !_sending && !Magelight.IsUIModeActive() && !Utility.IsInMenuMode()
+    bool ownPalette = Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId && _viewId != 0
+    if !_scanning && !_sending && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
         if _dirty && now - _lastChange >= 0.5
             ScanCatalog()
         elseif now - _lastScan >= 30.0
@@ -233,7 +235,7 @@ Event OnKeyDown(int keyCode)
             Magelight.ShowView(_viewId, false)
         endif
     elseif !Utility.IsInMenuMode()
-        Magelight.RequestUIMode(_viewId, true)
+        Magelight.RequestUIMode(_viewId, false)
     endif
 EndEvent
 
@@ -440,6 +442,7 @@ EndFunction
 
 Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0
+        Debug.Trace("[NirnCommand] Catalog callback rejected view=" + (numArg as int) + " expected=" + _viewId)
         return
     endif
     if StringUtil.Find(strArg, "applied|") == 0
@@ -461,6 +464,7 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
             return
         endif
         _domReady = true
+        Debug.Trace("[NirnCommand] Catalog ready session=" + _catalogSession + " epoch=" + _activeEpoch)
         SendCatalog()
         SendDiscovery()
         return
@@ -478,6 +482,7 @@ Function SendCatalog()
         return
     endif
     if _activeEpoch == 0 || !_domReady || _viewId == 0
+        Debug.Trace("[NirnCommand] Catalog waiting epoch=" + _activeEpoch + " ready=" + _domReady + " view=" + _viewId)
         return
     endif
     PublishCatalog(_slot, _activeEpoch, false)
@@ -511,6 +516,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     endif
     int i = 0
     int total = StorageUtil.FormListCount(player, list)
+    Debug.Trace("[NirnCommand] Catalog publication start session=" + _catalogSession + " epoch=" + sendEpoch + " entries=" + total)
     int batchIndex = 0
     int payloadBytes = 0
     string batch = ""
@@ -565,6 +571,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             Debug.Trace("[NirnCommand] Catalog transfer entries=" + total + " batches=" + batchIndex + " payloadBytes=" + payloadBytes + " seconds=" + (Utility.GetCurrentRealTime() - transferStarted))
         endif
     elseif commit && scanEpoch == _epoch
+        Debug.Trace("[NirnCommand] Catalog publication interrupted epoch=" + sendEpoch + " view=" + sendView + " currentView=" + _viewId + " ready=" + _domReady)
         _dirty = true
     endif
     _sending = false
@@ -651,7 +658,7 @@ bool Function SpellCatalogChanged()
     int i = 0
     while i < player.GetSpellCount()
         Spell known = player.GetNthSpell(i)
-        if known && known.GetEquipType() && player.HasSpell(known) && known.GetName() != ""
+        if known && NirnCommandNative.IsHandSpell(known) && player.HasSpell(known) && known.GetName() != ""
             StorageUtil.FormListAdd(player, candidate, known, false)
         endif
         i += 1
@@ -661,7 +668,7 @@ bool Function SpellCatalogChanged()
         i = 0
         while i < base.GetSpellCount()
             Spell known = base.GetNthSpell(i)
-            if known && known.GetEquipType() && known.GetName() != ""
+            if known && NirnCommandNative.IsHandSpell(known) && known.GetName() != ""
                 StorageUtil.FormListAdd(player, candidate, known, false)
             endif
             i += 1
@@ -698,6 +705,7 @@ Function ScanCatalog()
     int nextSlot = 1 - _slot
     string list = "NirnCommand.Forms" + nextSlot
     Actor player = Game.GetPlayer()
+    Debug.Trace("[NirnCommand] Catalog scan start epoch=" + scanEpoch + " full=" + _fullScan + " session=" + _catalogSession)
     if _previousSlot == nextSlot
         _previousEpoch = 0
     endif
@@ -754,7 +762,7 @@ Function ScanCatalog()
     total = player.GetSpellCount()
     while i < total && scanEpoch == _epoch
         Spell knownSpell = player.GetNthSpell(i)
-        if knownSpell && knownSpell.GetEquipType() && player.HasSpell(knownSpell) && knownSpell.GetName() != ""
+        if knownSpell && NirnCommandNative.IsHandSpell(knownSpell) && player.HasSpell(knownSpell) && knownSpell.GetName() != ""
             StorageUtil.FormListAdd(player, list, knownSpell, false)
             StorageUtil.FormListAdd(player, spellList, knownSpell, false)
         endif
@@ -769,7 +777,7 @@ Function ScanCatalog()
         total = playerBase.GetSpellCount()
         while i < total && scanEpoch == _epoch
             Spell baseSpell = playerBase.GetNthSpell(i)
-            if baseSpell && baseSpell.GetEquipType() && baseSpell.GetName() != "" && StorageUtil.FormListFind(player, list, baseSpell) < 0
+            if baseSpell && NirnCommandNative.IsHandSpell(baseSpell) && baseSpell.GetName() != "" && StorageUtil.FormListFind(player, list, baseSpell) < 0
                 StorageUtil.FormListAdd(player, list, baseSpell)
                 StorageUtil.FormListAdd(player, spellList, baseSpell, false)
             endif
@@ -780,7 +788,9 @@ Function ScanCatalog()
         endwhile
     endif
     if scanEpoch == _epoch
-        Debug.Trace("[NirnCommand] Catalog scan inventorySeconds=" + inventorySeconds + " spellsSeconds=" + (Utility.GetCurrentRealTime() - spellsStarted) + " entries=" + StorageUtil.FormListCount(player, list))
+        int spellCount = StorageUtil.FormListCount(player, spellList)
+        int entryCount = StorageUtil.FormListCount(player, list)
+        Debug.Trace("[NirnCommand] Catalog scan complete epoch=" + scanEpoch + " items=" + (entryCount - spellCount) + " spells=" + spellCount + " inventorySeconds=" + inventorySeconds + " spellsSeconds=" + (Utility.GetCurrentRealTime() - spellsStarted))
         bool identical = StorageUtil.FormListCount(player, list) == StorageUtil.FormListCount(player, "NirnCommand.Forms" + _slot)
         i = 0
         while identical && i < StorageUtil.FormListCount(player, list)
@@ -802,7 +812,7 @@ Function ScanCatalog()
                 _dirty = true
             endif
             _scanning = false
-        elseif !_sending && !Magelight.IsUIModeActive()
+        elseif !_sending && (!Magelight.IsUIModeActive() || Magelight.GetUIModeView() == _viewId)
             bool deltaPublished = false
             if changed.Length > 0 && !SpellCatalogChanged()
                 deltaPublished = PublishInventoryDelta(changed, nextSlot, scanEpoch)
@@ -1039,7 +1049,7 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     if kind == "item" && target && player.GetItemCount(target) > 0 && ((target as Weapon) || (target as Armor) || (target as Potion))
         player.EquipItem(target)
         ReportAction(request, "sent")
-    elseif (kind == "spell" || kind == "spellleft") && (target as Spell) && (target as Spell).GetEquipType() && IsAvailableSpell(player, target as Spell)
+    elseif (kind == "spell" || kind == "spellleft") && (target as Spell) && NirnCommandNative.IsHandSpell(target as Spell) && IsAvailableSpell(player, target as Spell)
         if kind == "spellleft"
             player.EquipSpell(target as Spell, 0)
         else

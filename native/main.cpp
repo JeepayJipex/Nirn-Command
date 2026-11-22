@@ -15,6 +15,13 @@ namespace {
         return std::filesystem::path(path).parent_path() / "Data";
     }
     const auto dataDirectory=DataDirectory();
+    bool IsHandSpell(RE::StaticFunctionTag*, RE::SpellItem* spell)
+    {
+        if (!spell || spell->GetSpellType() != RE::MagicSystem::SpellType::kSpell) return false;
+        const auto casting = spell->GetCastingType();
+        return casting == RE::MagicSystem::CastingType::kFireAndForget ||
+               casting == RE::MagicSystem::CastingType::kConcentration;
+    }
     std::vector<RE::TESForm*> InventoryForms(RE::StaticFunctionTag*, RE::Actor* actor)
     {
         std::vector<RE::TESForm*> forms;
@@ -167,6 +174,7 @@ namespace {
         vm->RegisterFunction("CatalogFragments", "NirnCommandNative", CatalogFragments);
         vm->RegisterFunction("CatalogEntry", "NirnCommandNative", CatalogEntry);
         vm->RegisterFunction("InventoryForms", "NirnCommandNative", InventoryForms);
+        vm->RegisterFunction("IsHandSpell", "NirnCommandNative", IsHandSpell);
         vm->RegisterFunction("GetHotkey", "NirnCommandNative", GetHotkey);
         vm->RegisterFunction("SetHotkey", "NirnCommandNative", SetHotkey);
         vm->RegisterFunction("LoadCommands", "NirnCommandNative", LoadCommands);
