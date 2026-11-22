@@ -1,10 +1,12 @@
 Scriptname NirnCommand_PlayerAlias extends ReferenceAlias
 
 int _viewId
+int _viewGeneration
 int _epoch
 bool _scanning
 bool _sending
 bool _discoverySending
+bool _discoveryRequested
 bool _domReady
 bool _snapshotRequested
 bool _dirty
@@ -35,10 +37,12 @@ Event OnPlayerLoadGame()
 EndEvent
 
 Function Setup()
+    _viewGeneration += 1
     _viewId = 0
     _domReady = false
     _uiEpoch = 0
     _snapshotRequested = false
+    _discoveryRequested = false
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
@@ -108,6 +112,7 @@ EndEvent
 
 Event OnDomReady(string eventName, string strArg, float numArg, Form sender)
     if strArg == "NirnCommand"
+        _viewGeneration += 1
         _domReady = false
         _viewId = 0
         Connect()
@@ -276,16 +281,20 @@ Event OnCommands(string eventName, string payload, float numArg, Form sender)
         if SKSE.GetPluginVersion("NirnCommandNative") >= 0
             count = NirnCommandNative.LoadCommands()
         endif
-        Magelight.Call(_viewId, "ncCommandsBegin", count as string)
+        int sendView = _viewId
+        int viewGeneration = _viewGeneration
+        Magelight.Call(sendView, "ncCommandsBegin", count as string)
         int i = 0
-        while i < count
-            Magelight.Call(_viewId, "ncCommandsChunk", i + "|" + NirnCommandNative.CommandsChunk(i))
+        while i < count && sendView == _viewId && viewGeneration == _viewGeneration
+            Magelight.Call(sendView, "ncCommandsChunk", i + "|" + NirnCommandNative.CommandsChunk(i))
             i += 1
             if i % 20 == 0
                 Utility.WaitMenuMode(0.01)
             endif
         endwhile
-        Magelight.Call(_viewId, "ncCommandsDone", "")
+        if sendView == _viewId && viewGeneration == _viewGeneration
+            Magelight.Call(sendView, "ncCommandsDone", "")
+        endif
         return
     endif
     int first = StringUtil.Find(payload, "|")
@@ -374,26 +383,35 @@ Event OnPersist(string eventName, string payload, float numArg, Form sender)
 EndEvent
 
 Function SendDiscovery()
-    if _discoverySending || !_domReady || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
+    if _discoverySending
+        _discoveryRequested = true
+        return
+    endif
+    if !_domReady || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
         return
     endif
     _discoverySending = true
     int sendView = _viewId
     int generation = _epoch
+    int viewGeneration = _viewGeneration
     Magelight.Call(sendView, "ncDiscoveryBegin", "")
     int count = NirnCommandNative.DiscoveryCount()
     int i = 0
-    while i < count && sendView == _viewId && generation == _epoch
+    while i < count && sendView == _viewId && generation == _epoch && viewGeneration == _viewGeneration && _domReady
         Magelight.Call(sendView, "ncDiscoveryEntry", NirnCommandNative.DiscoveryEntry(i))
         i += 1
         if i % 20 == 0
             Utility.WaitMenuMode(0.01)
         endif
     endwhile
-    if sendView == _viewId && generation == _epoch
+    if sendView == _viewId && generation == _epoch && viewGeneration == _viewGeneration && _domReady
         Magelight.Call(sendView, "ncDiscoveryComplete", "")
     endif
     _discoverySending = false
+    if _discoveryRequested && _domReady
+        _discoveryRequested = false
+        SendDiscovery()
+    endif
 EndFunction
 
 Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
@@ -446,6 +464,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     _sending = true
     int scanEpoch = _epoch
     int sendView = _viewId
+    int viewGeneration = _viewGeneration
     string list = "NirnCommand.Forms" + sendSlot
     Actor player = Game.GetPlayer()
     if sendView > 0
@@ -453,7 +472,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     endif
     int i = 0
     int total = StorageUtil.FormListCount(player, list)
-    while sendView > 0 && i < total && scanEpoch == _epoch && sendView == _viewId
+    while sendView > 0 && i < total && scanEpoch == _epoch && sendView == _viewId && viewGeneration == _viewGeneration && _domReady
         Form item = StorageUtil.FormListGet(player, list, i)
         if item
             string kind = "item"
@@ -467,7 +486,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             Utility.WaitMenuMode(0.01)
         endif
     endwhile
-    if scanEpoch == _epoch && sendView == _viewId
+    if scanEpoch == _epoch && sendView == _viewId && viewGeneration == _viewGeneration && _domReady
         if commit
             _previousEpoch = _activeEpoch
             _previousSlot = _slot
