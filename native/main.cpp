@@ -27,6 +27,12 @@ namespace {
         }
         return forms;
     }
+    RE::BSFixedString CatalogEntry(RE::StaticFunctionTag*, RE::BSFixedString type,
+        RE::BSFixedString token, RE::BSFixedString id, RE::BSFixedString name)
+    {
+        nlohmann::json entry = {type.c_str(), token.c_str(), id.c_str(), name.c_str()};
+        return entry.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    }
     std::mutex hotkeyMutex;
     const auto hotkeyFile = dataDirectory.empty() ? std::filesystem::path{} : dataDirectory / "SKSE/Plugins/NirnCommand/hotkey.json";
     std::int32_t GetHotkey(RE::StaticFunctionTag*, std::int32_t part)
@@ -152,6 +158,7 @@ namespace {
     }
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm)
     {
+        vm->RegisterFunction("CatalogEntry", "NirnCommandNative", CatalogEntry);
         vm->RegisterFunction("InventoryForms", "NirnCommandNative", InventoryForms);
         vm->RegisterFunction("GetHotkey", "NirnCommandNative", GetHotkey);
         vm->RegisterFunction("SetHotkey", "NirnCommandNative", SetHotkey);

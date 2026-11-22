@@ -10,6 +10,7 @@ bool _discoveryRequested
 bool _domReady
 bool _snapshotRequested
 bool _dirty
+bool _fullScan
 int _slot
 int _activeEpoch
 int _previousEpoch
@@ -64,6 +65,8 @@ Function Setup()
     RegisterForModEvent("Magelight_ViewDomReady", "OnDomReady")
     RegisterForModEvent("Magelight_UIModeExited", "OnUIModeExited")
     _dirty = true
+    _fullScan = true
+    StorageUtil.FormListClear(Game.GetPlayer(), "NirnCommand.Pending")
     _lastChange = 0.0
     _lastDiscovery = Utility.GetCurrentRealTime() - 30.0
     RegisterForSingleUpdate(1.0)
@@ -92,11 +95,13 @@ Event OnUpdate()
 EndEvent
 
 Event OnItemAdded(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akSourceContainer)
+    StorageUtil.FormListAdd(Game.GetPlayer(), "NirnCommand.Pending", akBaseItem, false)
     _dirty = true
     _lastChange = Utility.GetCurrentRealTime()
 EndEvent
 
 Event OnItemRemoved(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akDestContainer)
+    StorageUtil.FormListAdd(Game.GetPlayer(), "NirnCommand.Pending", akBaseItem, false)
     _dirty = true
     _lastChange = Utility.GetCurrentRealTime()
 EndEvent
@@ -441,6 +446,7 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         SendDiscovery()
         return
     elseif strArg == "refresh"
+        _fullScan = true
         _dirty = true
         _lastChange = 0.0
     endif
@@ -483,6 +489,8 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     endif
     int i = 0
     int total = StorageUtil.FormListCount(player, list)
+    int batchIndex = 0
+    string batch = ""
     while sendView > 0 && i < total && scanEpoch == _epoch && sendView == _viewId && viewGeneration == _viewGeneration && _domReady
         Form item = StorageUtil.FormListGet(player, list, i)
         if item
@@ -490,7 +498,16 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             if item as Spell
                 kind = "spell"
             endif
-            Magelight.Call(sendView, "ncAddEntry", kind + "|" + sendEpoch + ":" + i + "|" + PersistentKey(item, kind) + "|" + item.GetName())
+            string row = NirnCommandNative.CatalogEntry(kind, sendEpoch + ":" + i, PersistentKey(item, kind), item.GetName())
+            if StringUtil.GetLength(batch) + StringUtil.GetLength(row) > 1024 && batch != ""
+                Magelight.Call(sendView, "ncCatalogBatch", sendEpoch + "|" + batchIndex + "|" + batch)
+                batchIndex += 1
+                batch = ""
+            endif
+            if batch != ""
+                batch += "\n"
+            endif
+            batch += row
         endif
         i += 1
         if i % 40 == 0
@@ -506,7 +523,11 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             _lastScan = Utility.GetCurrentRealTime()
         endif
         if sendView > 0
-            Magelight.Call(sendView, "ncCatalogComplete", sendEpoch as string)
+            if batch != ""
+                Magelight.Call(sendView, "ncCatalogBatch", sendEpoch + "|" + batchIndex + "|" + batch)
+                batchIndex += 1
+            endif
+            Magelight.Call(sendView, "ncCatalogComplete", sendEpoch + "|" + batchIndex)
         endif
     elseif commit && scanEpoch == _epoch
         _dirty = true
@@ -538,19 +559,48 @@ Function ScanCatalog()
         _previousEpoch = 0
     endif
     StorageUtil.FormListClear(player, list)
+    Form[] changed = StorageUtil.FormListToArray(player, "NirnCommand.Pending")
+    StorageUtil.FormListClear(player, "NirnCommand.Pending")
     int i = 0
-    Form[] inventory = NirnCommandNative.InventoryForms(player)
-    int total = inventory.Length
-    while i < total && scanEpoch == _epoch
-        Form item = inventory[i]
-        if item && item.GetName() != ""
-            StorageUtil.FormListAdd(player, list, item)
-        endif
-        i += 1
-        if i % 40 == 0
-            Utility.WaitMenuMode(0.01)
-        endif
-    endwhile
+    int total = 0
+    if _fullScan || _activeEpoch == 0
+        _fullScan = false
+        Form[] inventory = NirnCommandNative.InventoryForms(player)
+        total = inventory.Length
+        while i < total && scanEpoch == _epoch
+            Form item = inventory[i]
+            if item && item.GetName() != ""
+                StorageUtil.FormListAdd(player, list, item, false)
+            endif
+            i += 1
+            if i % 40 == 0
+                Utility.WaitMenuMode(0.01)
+            endif
+        endwhile
+    else
+        string activeList = "NirnCommand.Forms" + _slot
+        Form[] existing = StorageUtil.FormListToArray(player, activeList)
+        total = existing.Length
+        while i < total && scanEpoch == _epoch
+            Form item = existing[i]
+            if item && !(item as Spell)
+                StorageUtil.FormListAdd(player, list, item, false)
+            endif
+            i += 1
+        endwhile
+        i = 0
+        while i < changed.Length && scanEpoch == _epoch
+            Form changedItem = changed[i]
+            if changedItem && ((changedItem as Weapon) || (changedItem as Armor) || (changedItem as Potion))
+                if player.GetItemCount(changedItem) > 0 && changedItem.GetName() != ""
+                    StorageUtil.FormListAdd(player, list, changedItem, false)
+                else
+                    StorageUtil.FormListRemove(player, list, changedItem, true)
+                endif
+            endif
+            i += 1
+        endwhile
+    endif
     i = 0
     total = player.GetSpellCount()
     while i < total && scanEpoch == _epoch
@@ -579,10 +629,22 @@ Function ScanCatalog()
         endwhile
     endif
     if scanEpoch == _epoch
-        if !_sending && !Magelight.IsUIModeActive()
+        bool identical = _activeEpoch != 0 && StorageUtil.FormListCount(player, list) == StorageUtil.FormListCount(player, "NirnCommand.Forms" + _slot)
+        i = 0
+        while identical && i < StorageUtil.FormListCount(player, list)
+            if StorageUtil.FormListGet(player, list, i) != StorageUtil.FormListGet(player, "NirnCommand.Forms" + _slot, i)
+                identical = false
+            endif
+            i += 1
+        endwhile
+        if identical
+            _lastScan = Utility.GetCurrentRealTime()
+            _scanning = false
+        elseif !_sending && !Magelight.IsUIModeActive()
             PublishCatalog(nextSlot, scanEpoch, true)
             _scanning = false
         else
+            _fullScan = true
             _dirty = true
             _scanning = false
         endif
