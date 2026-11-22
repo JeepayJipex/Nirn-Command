@@ -92,3 +92,13 @@ while(sent3.length) {
 }
 assert.equal(operations[0],'begin');assert.equal(operations.at(-1),'commit');assert.equal(JSON.parse(serialized).commands[0].label,'Épée 😀');assert.equal(JSON.parse(serialized).commands[0].action,'console:help "été|é"');
 console.log('Native command migration and Unicode transaction protocol checks passed.');
+// Hotkey saves use the registered execute listener and ignore mismatched replies.
+const sent4=[], timers4=[], handlers4={}, editor4={isOpen:()=>false,open(){},hide(){},hotkeyState(){},hotkeyResult(...args){this.last=args;}};
+let options4;const window4={magelight:{send:(...args)=>sent4.push(args),on:(name,fn)=>handlers4[name]=fn},NirnEditor:{create:options=>(options4=options,editor4),codes:{}},NIRN_COMMANDS:[],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
+const document4={querySelector:s=>({'#query':new Element('input'),'#results':new Element(),'#meta':new Element(),'#status':new Element()})[s],createElement:t=>new Element(t),createDocumentFragment:()=>new Element('fragment'),addEventListener(){}};
+vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window4,document:document4,localStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:fn=>timers4.push(fn)}));
+assert.equal(options4.setHotkey(66,32,7),true);assert.deepEqual(sent4.shift(),['execute','1|hotkey:66|32']);
+assert.equal(options4.setHotkey(67,0,7),false);window4.ncHotkeyResult('99|ok');assert.equal(editor4.last,undefined);
+window4.ncHotkeyResult('1|ok');assert.deepEqual(editor4.last,[true,7]);timers4.shift()();assert.equal(sent4.length,0);
+assert.equal(options4.setHotkey(68,0,8),true);sent4.shift();timers4.shift()();assert.deepEqual(editor4.last,['timeout',8]);assert.deepEqual(sent4.shift(),['execute','3|hotkey:get']);
+console.log('Hotkey routing, request correlation and timeout reconciliation checks passed.');
