@@ -80,7 +80,7 @@ std::vector<std::string> split_utf8(const std::string& data, std::size_t maxByte
 {
     std::vector<std::string> result;
     for (std::size_t start=0; start<data.size();) {
-        auto end=std::min(start+maxBytes, data.size());
+        auto end=(std::min)(start+maxBytes, data.size());
         while (end<data.size() && end>start && (static_cast<unsigned char>(data[end]) & 0xc0) == 0x80) --end;
         if (end==start) return {};
         result.push_back(data.substr(start,end-start));

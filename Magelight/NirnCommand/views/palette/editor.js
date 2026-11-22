@@ -22,8 +22,8 @@ window.NirnEditor = (() => {
     let panel, capture=false, held=0, current=null, shortcut=null, mode='command';
     const get=id=>panel.querySelector(`[data-field="${id}"]`);
     const message=text=>{ get('message').textContent=text; };
-    function show() { panel.hidden=false; get('name').focus(); }
-    function hide() { if(panel) panel.hidden=true; capture=false; held=0; options.onClose(); }
+    function show() { panel.hidden=false; panel.parentElement.classList.add('editing'); get('name').focus(); }
+    function hide() { if(panel) {panel.hidden=true; panel.parentElement.classList.remove('editing');} capture=false; held=0; options.onClose(); }
     function updateShortcut() { get('capture').textContent=shortcut ? describe(shortcut.key,shortcut.mask) : 'Capture keys'; }
     function setAction(value) {
       const parts=String(value||'').split(':'); shortcut=null;

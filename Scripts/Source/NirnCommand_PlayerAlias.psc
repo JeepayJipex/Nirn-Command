@@ -63,7 +63,7 @@ Event OnUpdate()
         Connect()
     endif
     float now = Utility.GetCurrentRealTime()
-    if !_scanning && !_sending && !Magelight.IsUIModeActive()
+    if !_scanning && !_sending && !Magelight.IsUIModeActive() && !Utility.IsInMenuMode()
         if (_dirty && now - _lastChange >= 0.5) || now - _lastScan >= 30.0
             ScanCatalog()
         endif
@@ -71,6 +71,7 @@ Event OnUpdate()
             _lastDiscovery = now
             if SKSE.GetPluginVersion("NirnCommandNative") >= 0
                 NirnCommandNative.RefreshDiscovery()
+                SendCapabilities()
                 SendDiscovery()
             endif
         endif
@@ -91,6 +92,9 @@ EndEvent
 Event OnUIModeExited(string eventName, string strArg, float numArg, Form sender)
     if (numArg as int) == _viewId
         _keyHeld = false
+        if !Magelight.IsUIModeActive() || Magelight.GetUIModeView() != _viewId
+            Magelight.ShowView(_viewId, false)
+        endif
     endif
 EndEvent
 
@@ -121,25 +125,7 @@ Function Connect()
             return
         endif
         Magelight.Call(_viewId, "ncGameLoaded", "")
-        int consoleAvailable = 0
-        int skyrimNetAvailable = 0
-        int oarAvailable = 0
-        int oarInstalled = 0
-        if SKSE.GetPluginVersion("ConsoleUtilSSE") >= 0 || SKSE.GetPluginVersion("ConsoleUtil") >= 0
-            consoleAvailable = 1
-        endif
-        if SKSE.GetPluginVersion("SkyrimNet") >= 0
-            skyrimNetAvailable = 1
-        endif
-        if SKSE.GetPluginVersion("OpenAnimationReplacer") >= 0
-            oarInstalled = 1
-        endif
-        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
-            if NirnCommandNative.IsOarAvailable()
-                oarAvailable = 1
-            endif
-        endif
-        Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable + "|" + oarInstalled)
+        SendCapabilities()
         Magelight.BindHotkey(_viewId, 0, 0)
         Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
         Magelight.Call(_viewId, "ncBridgeReady", "")
@@ -147,6 +133,31 @@ Function Connect()
         SendDiscovery()
         Debug.Trace("[NirnCommand] Bridge ready, view " + _viewId)
     endif
+EndFunction
+
+Function SendCapabilities()
+    if _viewId == 0
+        return
+    endif
+    int consoleAvailable = 0
+    int skyrimNetAvailable = 0
+    int oarAvailable = 0
+    int oarInstalled = 0
+    if SKSE.GetPluginVersion("ConsoleUtilSSE") >= 0 || SKSE.GetPluginVersion("ConsoleUtil") >= 0
+        consoleAvailable = 1
+    endif
+    if SKSE.GetPluginVersion("SkyrimNet") >= 0
+        skyrimNetAvailable = 1
+    endif
+    if SKSE.GetPluginVersion("OpenAnimationReplacer") >= 0
+        oarInstalled = 1
+    endif
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        if NirnCommandNative.IsOarAvailable()
+            oarAvailable = 1
+        endif
+    endif
+    Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable + "|" + oarInstalled)
 EndFunction
 
 bool Function ValidShortcut(int keyCode, int modifiers)

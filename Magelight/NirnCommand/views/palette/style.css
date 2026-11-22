@@ -42,3 +42,5 @@ footer span { display:flex; gap:5px; align-items:center; }
 .editor-message { color:#c8ac7e; font-size:11px; min-height:25px; padding-top:8px; }
 .editor-buttons { display:flex; gap:8px; }
 .editor-buttons button { width:auto; min-width:90px; text-align:center; }
+
+.palette.editing { min-height: 410px; }

@@ -8,7 +8,7 @@ class El {
   focus() {}
   click(){this.listeners.click?.({});}
 }
-const parent=new El(),document={createElement:()=>new El(),querySelector:()=>({appendChild(el){parent.panel=el;}})};
+const parent=new El(); parent.classList={add(){},remove(){}}; const document={createElement:()=>new El(),querySelector:()=>({appendChild(el){parent.panel=el;el.parentElement=parent;}})};
 const window={},ctx=vm.createContext({window,document,Date,Math});
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/editor.js','utf8'),ctx);
 let commands=[],hotkey=null,closed=0;
