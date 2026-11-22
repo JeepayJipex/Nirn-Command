@@ -219,7 +219,7 @@
     if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
   };
   window.ncCatalogBegin = function(value) { epoch=String(value); incoming=[]; };
-  window.ncCatalogComplete = function(value) { if (String(value)!==epoch) return; discovered=incoming; incoming=[]; statusEl.textContent='Catalog ready'; render(); };
+  window.ncCatalogComplete = function(value) { if (String(value)!==epoch) return; discovered=incoming; incoming=[]; statusEl.textContent='Catalog ready'; render(); if(bridge) bridge.send('catalog','applied|' + epoch); };
   window.ncAddEntry = function(payload) {
     const text=String(payload || ''), a=text.indexOf('|'), b=text.indexOf('|',a+1), c=text.indexOf('|',b+1);
     if (a<0 || b<0 || c<0) return; const type=text.slice(0,a), token=text.slice(a+1,b), id=text.slice(b+1,c), name=text.slice(c+1);

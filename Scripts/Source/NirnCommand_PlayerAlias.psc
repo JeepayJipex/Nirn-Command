@@ -6,11 +6,13 @@ bool _scanning
 bool _sending
 bool _discoverySending
 bool _domReady
+bool _snapshotRequested
 bool _dirty
 int _slot
 int _activeEpoch
 int _previousEpoch
 int _previousSlot
+int _uiEpoch
 float _lastChange
 float _lastScan
 float _lastDiscovery
@@ -35,6 +37,8 @@ EndEvent
 Function Setup()
     _viewId = 0
     _domReady = false
+    _uiEpoch = 0
+    _snapshotRequested = false
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
@@ -104,6 +108,7 @@ EndEvent
 
 Event OnDomReady(string eventName, string strArg, float numArg, Form sender)
     if strArg == "NirnCommand"
+        _domReady = false
         _viewId = 0
         Connect()
     endif
@@ -395,7 +400,13 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0
         return
     endif
-    if strArg == "ready"
+    if StringUtil.Find(strArg, "applied|") == 0
+        int applied = StringUtil.Substring(strArg, 8) as int
+        if applied == _activeEpoch
+            _uiEpoch = applied
+        endif
+        return
+    elseif strArg == "ready"
         _domReady = true
         SendCatalog()
         SendDiscovery()
@@ -408,7 +419,11 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
 EndEvent
 
 Function SendCatalog()
-    if _activeEpoch == 0 || _sending || !_domReady || _viewId == 0
+    if _sending
+        _snapshotRequested = true
+        return
+    endif
+    if _activeEpoch == 0 || !_domReady || _viewId == 0
         return
     endif
     PublishCatalog(_slot, _activeEpoch, false)
@@ -467,10 +482,19 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
         _dirty = true
     endif
     _sending = false
+    if _snapshotRequested && _domReady
+        _snapshotRequested = false
+        SendCatalog()
+    endif
 EndFunction
 
 Function ScanCatalog()
     if _scanning || _sending
+        return
+    endif
+    ; Do not overwrite the prior slot until the page accepted the active generation.
+    if _domReady && _previousEpoch != 0 && _uiEpoch != _activeEpoch
+        SendCatalog()
         return
     endif
     _scanning = true
