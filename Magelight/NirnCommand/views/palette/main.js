@@ -34,6 +34,7 @@
   let fallbackReady=false, fallbackReading=false, fallbackDirty=false, fallbackWriting=false, fallbackSlot=0, fallbackParts=[], fallbackCount=0, fallbackRequest=0, fallbackPending=null;
   const fallbackTouched=new Set();
   let openingHotkey={key:210,mask:0};
+  let hotkeyPending=0;
   let commands=[], commandsReady=false, commandsReadStarted=false, commandsMissing=false, commandsCount=-2, commandsParts=[];
   let commandsDirty=false, commandsWriting=false, commandsSerial=0, commandsPending=null;
   function validCommands(value) {
@@ -67,7 +68,7 @@
     getCommands:()=>commands,
     setCommands:value=>{commands=validCommands(value);commandsDirty=true;render();flushCommands();},
     getHotkey:()=>openingHotkey,
-    setHotkey:(key,mask)=>{if(bridge) bridge.send('hotkey',`${key}|${mask}`);},
+    setHotkey:(key,mask)=>{ if(!bridge || hotkeyPending) return; const request=String(++serial); hotkeyPending=Number(request); bridge.send('execute',`${request}|hotkey:${key}|${mask}`); setTimeout(()=>{if(hotkeyPending===Number(request)) {hotkeyPending=0; editor?.hotkeyResult(false); statusEl.textContent='Shortcut result unconfirmed'; bridge.send('execute',`${++serial}|hotkey:get`);}},5000); },
     onClose:()=>{heldModifiers=0;if(bridge) bridge.send('__escapecapture','0');input.focus();render();}
   });
   window.ncCommandsBegin = function(payload) {const count=Number(payload); commandsCount=Number.isInteger(count)&&count>=-3&&count<=1024?count:-2; commandsParts=commandsCount>=0 ? new Array(commandsCount) : [];};
@@ -207,7 +208,7 @@
     }
   };
   window.ncHotkey = function(payload) { const [key,mask]=String(payload).split('|').map(Number); if(Number.isInteger(key) && Number.isInteger(mask)) openingHotkey={key,mask}; };
-  window.ncHotkeyResult = function(payload) { editor?.hotkeyResult(payload==='ok'); statusEl.textContent=payload==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
+  window.ncHotkeyResult = function(payload) { const [request,result]=String(payload).split('|'); if(Number(request)!==hotkeyPending) return; hotkeyPending=0; editor?.hotkeyResult(result==='ok'); statusEl.textContent=result==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
   window.ncCapabilities = function(payload) { capabilities=String(payload).split('|').map(value=>value==='1'); render(); };
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
   window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
@@ -234,7 +235,7 @@
     if (editor?.isOpen()) { editor.keydown(event); return; }
     if (event.isComposing || event.keyCode===229) return;
     if (modifierBits[event.code]) heldModifiers |= modifierBits[event.code];
-    if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('hotkey','close'); return;}
+    if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('execute',`${++serial}|hotkey:close`); return;}
     if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
     else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
     else if (event.key==='Enter' || event.code==='NumpadEnter') {event.preventDefault();execute(results[selected],event.ctrlKey);}

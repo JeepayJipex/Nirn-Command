@@ -15,6 +15,18 @@ namespace {
         return std::filesystem::path(path).parent_path() / "Data";
     }
     const auto dataDirectory=DataDirectory();
+    std::vector<RE::TESForm*> InventoryForms(RE::StaticFunctionTag*, RE::Actor* actor)
+    {
+        std::vector<RE::TESForm*> forms;
+        if (!actor) return forms;
+        for (const auto& [form, count] : actor->GetInventoryCounts()) {
+            if (form && count > 0 && (form->Is(RE::FormType::Weapon) ||
+                form->Is(RE::FormType::Armor) || form->Is(RE::FormType::AlchemyItem))) {
+                forms.push_back(form);
+            }
+        }
+        return forms;
+    }
     std::mutex hotkeyMutex;
     const auto hotkeyFile = dataDirectory.empty() ? std::filesystem::path{} : dataDirectory / "SKSE/Plugins/NirnCommand/hotkey.json";
     std::int32_t GetHotkey(RE::StaticFunctionTag*, std::int32_t part)
@@ -140,6 +152,7 @@ namespace {
     }
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm)
     {
+        vm->RegisterFunction("InventoryForms", "NirnCommandNative", InventoryForms);
         vm->RegisterFunction("GetHotkey", "NirnCommandNative", GetHotkey);
         vm->RegisterFunction("SetHotkey", "NirnCommandNative", SetHotkey);
         vm->RegisterFunction("LoadCommands", "NirnCommandNative", LoadCommands);

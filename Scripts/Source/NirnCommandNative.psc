@@ -11,3 +11,4 @@ bool Function AppendCommandsChunk(string chunk) Global Native
 bool Function CommitCommandsWrite() Global Native
 int Function GetHotkey(int part) Global Native
 bool Function SetHotkey(int keyCode, int modifiers) Global Native
+Form[] Function InventoryForms(Actor player) Global Native

@@ -234,6 +234,14 @@ Event OnHotkey(string eventName, string payload, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0
         return
     endif
+    HandleHotkey(payload, "legacy")
+EndEvent
+
+Function HandleHotkey(string payload, string request)
+    if payload == "get"
+        Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
+        return
+    endif
     if payload == "close"
         if Magelight.GetUIModeView() == _viewId
             Magelight.ReleaseUIMode("NirnCommand")
@@ -248,11 +256,13 @@ Event OnHotkey(string eventName, string payload, float numArg, Form sender)
     int keyCode = StringUtil.Substring(payload, 0, separator) as int
     int modifiers = StringUtil.Substring(payload, separator + 1) as int
     if !ValidHotkey(keyCode, modifiers)
-        Magelight.Call(_viewId, "ncHotkeyResult", "failure")
+        Debug.Trace("[NirnCommand] Hotkey request " + request + " failed")
+        Magelight.Call(_viewId, "ncHotkeyResult", request + "|failure")
         return
     endif
     if SKSE.GetPluginVersion("NirnCommandNative") < 0 || !NirnCommandNative.SetHotkey(keyCode, modifiers)
-        Magelight.Call(_viewId, "ncHotkeyResult", "failure")
+        Debug.Trace("[NirnCommand] Hotkey request " + request + " failed")
+        Magelight.Call(_viewId, "ncHotkeyResult", request + "|failure")
         return
     endif
     UnregisterForKey(_hotkey)
@@ -261,8 +271,9 @@ Event OnHotkey(string eventName, string payload, float numArg, Form sender)
     _keyHeld = false
     RegisterForKey(_hotkey)
     Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
-    Magelight.Call(_viewId, "ncHotkeyResult", "ok")
-EndEvent
+    Debug.Trace("[NirnCommand] Hotkey request " + request + " saved")
+    Magelight.Call(_viewId, "ncHotkeyResult", request + "|ok")
+EndFunction
 
 Function ReportAction(string request, string result)
     Magelight.Call(_viewId, "ncActionResult", request + "|" + result)
@@ -528,10 +539,11 @@ Function ScanCatalog()
     endif
     StorageUtil.FormListClear(player, list)
     int i = 0
-    int total = player.GetNumItems()
+    Form[] inventory = NirnCommandNative.InventoryForms(player)
+    int total = inventory.Length
     while i < total && scanEpoch == _epoch
-        Form item = player.GetNthForm(i)
-        if item && ((item as Weapon) || (item as Armor) || (item as Potion)) && player.GetItemCount(item) > 0 && item.GetName() != ""
+        Form item = inventory[i]
+        if item && item.GetName() != ""
             StorageUtil.FormListAdd(player, list, item)
         endif
         i += 1
@@ -551,6 +563,21 @@ Function ScanCatalog()
             Utility.WaitMenuMode(0.01)
         endif
     endwhile
+    ActorBase playerBase = player.GetActorBase()
+    if playerBase
+        i = 0
+        total = playerBase.GetSpellCount()
+        while i < total && scanEpoch == _epoch
+            Spell baseSpell = playerBase.GetNthSpell(i)
+            if baseSpell && baseSpell.GetEquipType() && baseSpell.GetName() != "" && StorageUtil.FormListFind(player, list, baseSpell) < 0
+                StorageUtil.FormListAdd(player, list, baseSpell)
+            endif
+            i += 1
+            if i % 40 == 0
+                Utility.WaitMenuMode(0.01)
+            endif
+        endwhile
+    endif
     if scanEpoch == _epoch
         if !_sending && !Magelight.IsUIModeActive()
             PublishCatalog(nextSlot, scanEpoch, true)
@@ -582,6 +609,23 @@ string Function PersistentKey(Form target, string kind)
     return "game:" + kind + ":" + plugin + ":" + localId
 EndFunction
 
+bool Function IsAvailableSpell(Actor player, Spell target)
+    if player.HasSpell(target)
+        return true
+    endif
+    ActorBase playerBase = player.GetActorBase()
+    if playerBase
+        int i = 0
+        while i < playerBase.GetSpellCount()
+            if playerBase.GetNthSpell(i) == target
+                return true
+            endif
+            i += 1
+        endwhile
+    endif
+    return false
+EndFunction
+
 Event OnExecute(string eventName, string payload, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0
         return
@@ -592,6 +636,10 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     endif
     string request = StringUtil.Substring(payload, 0, split)
     payload = StringUtil.Substring(payload, split + 1)
+    if StringUtil.Find(payload, "hotkey:") == 0
+        HandleHotkey(StringUtil.Substring(payload, 7), request)
+        return
+    endif
     Magelight.ShowView(_viewId, false)
     bool released = Magelight.ReleaseUIMode("NirnCommand")
     if !released && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
@@ -735,7 +783,7 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     if kind == "item" && target && player.GetItemCount(target) > 0 && ((target as Weapon) || (target as Armor) || (target as Potion))
         player.EquipItem(target)
         ReportAction(request, "sent")
-    elseif (kind == "spell" || kind == "spellleft") && (target as Spell) && (target as Spell).GetEquipType() && player.HasSpell(target as Spell)
+    elseif (kind == "spell" || kind == "spellleft") && (target as Spell) && (target as Spell).GetEquipType() && IsAvailableSpell(player, target as Spell)
         if kind == "spellleft"
             player.EquipSpell(target as Spell, 0)
         else
