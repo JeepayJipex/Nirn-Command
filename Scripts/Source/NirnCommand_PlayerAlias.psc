@@ -2,6 +2,7 @@ Scriptname NirnCommand_PlayerAlias extends ReferenceAlias
 
 int _viewId
 int _viewGeneration
+string _catalogSession
 int _epoch
 bool _scanning
 bool _sending
@@ -150,7 +151,7 @@ Function Connect()
             _viewId = 0
             return
         endif
-        Magelight.Call(_viewId, "ncGameLoaded", "")
+        Magelight.Call(_viewId, "ncGameLoaded", "new")
         SendCapabilities()
         Magelight.BindHotkey(_viewId, 0, 0)
         Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
@@ -442,7 +443,11 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         return
     endif
     if StringUtil.Find(strArg, "applied|") == 0
-        int applied = StringUtil.Substring(strArg, 8) as int
+        int separator = StringUtil.Find(strArg, "|", 8)
+        if separator < 0 || StringUtil.Substring(strArg, 8, separator - 8) != _catalogSession
+            return
+        endif
+        int applied = StringUtil.Substring(strArg, separator + 1) as int
         if applied == _activeEpoch
             _uiEpoch = applied
             if applied == _transferEpoch
@@ -450,7 +455,11 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
             endif
         endif
         return
-    elseif strArg == "ready"
+    elseif StringUtil.Find(strArg, "ready|") == 0
+        _catalogSession = StringUtil.Substring(strArg, 6)
+        if _catalogSession == ""
+            return
+        endif
         _domReady = true
         SendCatalog()
         SendDiscovery()
@@ -498,7 +507,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     string list = "NirnCommand.Forms" + sendSlot
     Actor player = Game.GetPlayer()
     if sendView > 0
-        Magelight.Call(sendView, "ncCatalogBegin", sendEpoch as string)
+        Magelight.Call(sendView, "ncCatalogBegin", _catalogSession + "|" + sendEpoch)
     endif
     int i = 0
     int total = StorageUtil.FormListCount(player, list)
@@ -515,7 +524,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
             string row = NirnCommandNative.CatalogEntry(kind, sendEpoch + ":" + i, PersistentKey(item, kind), item.GetName())
             payloadBytes += StringUtil.GetLength(row)
             if StringUtil.GetLength(batch) + StringUtil.GetLength(row) + 1 > 960 && batch != ""
-                Magelight.Call(sendView, "ncCatalogBatch", sendEpoch + "|" + batchIndex + "|" + batch)
+                Magelight.Call(sendView, "ncCatalogBatch", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + batch)
                 batchIndex += 1
                 batch = ""
             endif
@@ -523,7 +532,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
                 string[] fragments = NirnCommandNative.CatalogFragments(row)
                 int part = 0
                 while part < fragments.Length && scanEpoch == _epoch && viewGeneration == _viewGeneration && _domReady
-                    Magelight.Call(sendView, "ncCatalogFragment", sendEpoch + "|" + batchIndex + "|" + part + "|" + fragments.Length + "|" + fragments[part])
+                    Magelight.Call(sendView, "ncCatalogFragment", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + part + "|" + fragments.Length + "|" + fragments[part])
                     batchIndex += 1
                     part += 1
                 endwhile
@@ -549,10 +558,10 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
         endif
         if sendView > 0
             if batch != ""
-                Magelight.Call(sendView, "ncCatalogBatch", sendEpoch + "|" + batchIndex + "|" + batch)
+                Magelight.Call(sendView, "ncCatalogBatch", _catalogSession + "|" + sendEpoch + "|" + batchIndex + "|" + batch)
                 batchIndex += 1
             endif
-            Magelight.Call(sendView, "ncCatalogComplete", sendEpoch + "|" + batchIndex)
+            Magelight.Call(sendView, "ncCatalogComplete", _catalogSession + "|" + sendEpoch + "|" + batchIndex)
             Debug.Trace("[NirnCommand] Catalog transfer entries=" + total + " batches=" + batchIndex + " payloadBytes=" + payloadBytes + " seconds=" + (Utility.GetCurrentRealTime() - transferStarted))
         endif
     elseif commit && scanEpoch == _epoch

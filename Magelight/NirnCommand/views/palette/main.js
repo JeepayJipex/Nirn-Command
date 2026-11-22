@@ -232,17 +232,19 @@
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
   window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
   window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
-  window.ncGameLoaded = function() { modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  let catalogSession='';
+  function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
+  window.ncGameLoaded = function(value) { catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : ''; modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
-    if(bridge) bridge.send('catalog','ready');
+    if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
     if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
   };
   let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null;
-  window.ncCatalogBegin = function(value) { epoch=String(value); incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); };
-  window.ncCatalogBatch = function(payload) { const text=String(payload), a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0) {catalogInvalid=true; return;} if(text.slice(0,a)!==epoch) return; if(Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++;} catch (_) {catalogInvalid=true;} };
+  window.ncCatalogBegin = function(value) { const framed=catalogFrame(value); if(framed===null) return; epoch=framed; incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); };
+  window.ncCatalogBatch = function(payload) { const text=catalogFrame(payload); if(text===null) return; const a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0) {catalogInvalid=true; return;} if(text.slice(0,a)!==epoch) return; if(Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++;} catch (_) {catalogInvalid=true;} };
   window.ncCatalogFragment = function(payload) {
-    const text=String(payload); let cursor=0, fields=[];
+    const text=catalogFrame(payload); if(text===null) return; let cursor=0, fields=[];
     for(let i=0;i<4;i++) {const next=text.indexOf('|',cursor); if(next<0) {catalogInvalid=true;return;} fields.push(text.slice(cursor,next));cursor=next+1;}
     const [generation,sequence,part,count]=fields; const index=Number(part), total=Number(count);
     if(generation!==epoch) return;
@@ -256,7 +258,7 @@
       catalogFragment=null;
     }
   };
-  window.ncCatalogComplete = function(value) { const [received,count]=String(value).split('|'); if(received!==epoch) return; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];statusEl.textContent='Catalog transfer incomplete'; if(bridge) setTimeout(()=>bridge.send('catalog','snapshot'),1000);return;} discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge) bridge.send('catalog','applied|' + epoch); };
+  window.ncCatalogComplete = function(value) { const framed=catalogFrame(value); if(framed===null) return; const [received,count]=framed.split('|'); if(received!==epoch) return; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];statusEl.textContent='Catalog transfer incomplete'; if(bridge) setTimeout(()=>bridge.send('catalog','snapshot'),1000);return;} discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge) bridge.send('catalog','applied|' + (catalogSession?catalogSession+'|':'') + epoch); };
   window.ncAddEntry = function(payload) {
     const text=String(payload || ''), a=text.indexOf('|'), b=text.indexOf('|',a+1), c=text.indexOf('|',b+1);
     if (a<0 || b<0 || c<0) return; const type=text.slice(0,a), token=text.slice(a+1,b), id=text.slice(b+1,c), name=text.slice(c+1);
