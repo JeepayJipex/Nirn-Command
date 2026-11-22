@@ -214,6 +214,7 @@
   window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
   window.ncGameLoaded = function() { modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
+    if(bridge) bridge.send('catalog','ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
     if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
   };

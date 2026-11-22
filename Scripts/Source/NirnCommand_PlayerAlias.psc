@@ -5,6 +5,7 @@ int _epoch
 bool _scanning
 bool _sending
 bool _discoverySending
+bool _domReady
 bool _dirty
 int _slot
 int _activeEpoch
@@ -33,6 +34,7 @@ EndEvent
 
 Function Setup()
     _viewId = 0
+    _domReady = false
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
@@ -131,8 +133,6 @@ Function Connect()
         Magelight.BindHotkey(_viewId, 0, 0)
         Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
         Magelight.Call(_viewId, "ncBridgeReady", "")
-        SendCatalog()
-        SendDiscovery()
         Debug.Trace("[NirnCommand] Bridge ready, view " + _viewId)
     endif
 EndFunction
@@ -369,7 +369,7 @@ Event OnPersist(string eventName, string payload, float numArg, Form sender)
 EndEvent
 
 Function SendDiscovery()
-    if _discoverySending || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
+    if _discoverySending || !_domReady || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
         return
     endif
     _discoverySending = true
@@ -395,7 +395,12 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0
         return
     endif
-    if strArg == "refresh"
+    if strArg == "ready"
+        _domReady = true
+        SendCatalog()
+        SendDiscovery()
+        return
+    elseif strArg == "refresh"
         _dirty = true
         _lastChange = 0.0
     endif
@@ -403,7 +408,7 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
 EndEvent
 
 Function SendCatalog()
-    if _activeEpoch == 0 || _sending || _viewId == 0
+    if _activeEpoch == 0 || _sending || !_domReady || _viewId == 0
         return
     endif
     PublishCatalog(_slot, _activeEpoch, false)
@@ -411,6 +416,16 @@ EndFunction
 
 Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     if _sending
+        return
+    endif
+    if !_domReady
+        if commit
+            _previousEpoch = _activeEpoch
+            _previousSlot = _slot
+            _slot = sendSlot
+            _activeEpoch = sendEpoch
+            _lastScan = Utility.GetCurrentRealTime()
+        endif
         return
     endif
     _sending = true
