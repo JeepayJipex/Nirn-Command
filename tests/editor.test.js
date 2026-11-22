@@ -23,4 +23,5 @@ f('delete').click();assert.equal(commands.length,0);
 editor.open('hotkey');f('capture').click();press('Alt','AltRight');press('F8','F8');f('save').click();assert.deepEqual(hotkey,{key:66,mask:32});
 editor.hotkeyResult(true);assert.equal(closed,1);
 editor.open('hotkey');f('capture').click();press('PageUp','PageUp');f('save').click();assert.equal(hotkey.key,66);
+press('Escape','Escape'); editor.hotkeyResult('timeout'); assert.equal(f('message').textContent,'Result unconfirmed. Current shortcut is being checked.'); editor.hotkeyResult(false); assert.equal(f('message').textContent,'Could not save shortcut'); editor.hide(); editor.open('hotkey'); const before=closed; editor.hotkeyResult(true,1); assert.equal(closed,before); assert.equal(editor.isOpen(),true);
 console.log('Editor capture, left/right modifiers, command CRUD, and opening shortcut checks passed.');
