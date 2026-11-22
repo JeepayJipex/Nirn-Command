@@ -682,7 +682,7 @@ Function ScanCatalog()
     endif
     if scanEpoch == _epoch
         Debug.Trace("[NirnCommand] Catalog scan inventorySeconds=" + inventorySeconds + " spellsSeconds=" + (Utility.GetCurrentRealTime() - spellsStarted) + " entries=" + StorageUtil.FormListCount(player, list))
-        bool identical = _activeEpoch != 0 && StorageUtil.FormListCount(player, list) == StorageUtil.FormListCount(player, "NirnCommand.Forms" + _slot)
+        bool identical = StorageUtil.FormListCount(player, list) == StorageUtil.FormListCount(player, "NirnCommand.Forms" + _slot)
         i = 0
         while identical && i < StorageUtil.FormListCount(player, list)
             if StorageUtil.FormListGet(player, list, i) != StorageUtil.FormListGet(player, "NirnCommand.Forms" + _slot, i)
@@ -691,8 +691,17 @@ Function ScanCatalog()
             i += 1
         endwhile
         if identical
-            StorageUtil.FormListCopy(player, "NirnCommand.SpellSnapshot", StorageUtil.FormListToArray(player, spellList))
-            _lastScan = Utility.GetCurrentRealTime()
+            if _activeEpoch == 0
+                ; The saved slot is usable only after every current form matched.
+                PublishCatalog(_slot, scanEpoch, true)
+            endif
+            if _activeEpoch != 0
+                StorageUtil.FormListCopy(player, "NirnCommand.SpellSnapshot", StorageUtil.FormListToArray(player, spellList))
+                _lastScan = Utility.GetCurrentRealTime()
+            else
+                _fullScan = true
+                _dirty = true
+            endif
             _scanning = false
         elseif !_sending && !Magelight.IsUIModeActive()
             PublishCatalog(nextSlot, scanEpoch, true)
