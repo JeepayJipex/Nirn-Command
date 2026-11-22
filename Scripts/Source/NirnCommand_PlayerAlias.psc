@@ -4,6 +4,7 @@ int _viewId
 int _epoch
 bool _scanning
 bool _sending
+bool _discoverySending
 bool _dirty
 int _slot
 int _activeEpoch
@@ -24,6 +25,7 @@ Event OnPlayerLoadGame()
     _epoch += 1
     _scanning = false
     _sending = false
+    _discoverySending = false
     _activeEpoch = 0
     _previousEpoch = 0
     Setup()
@@ -367,9 +369,10 @@ Event OnPersist(string eventName, string payload, float numArg, Form sender)
 EndEvent
 
 Function SendDiscovery()
-    if _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
+    if _discoverySending || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
         return
     endif
+    _discoverySending = true
     int sendView = _viewId
     int generation = _epoch
     Magelight.Call(sendView, "ncDiscoveryBegin", "")
@@ -385,6 +388,7 @@ Function SendDiscovery()
     if sendView == _viewId && generation == _epoch
         Magelight.Call(sendView, "ncDiscoveryComplete", "")
     endif
+    _discoverySending = false
 EndFunction
 
 Event OnCatalog(string eventName, string strArg, float numArg, Form sender)

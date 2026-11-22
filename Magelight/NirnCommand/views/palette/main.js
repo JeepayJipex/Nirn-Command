@@ -68,7 +68,7 @@
     setCommands:value=>{commands=validCommands(value);commandsDirty=true;render();flushCommands();},
     getHotkey:()=>openingHotkey,
     setHotkey:(key,mask)=>{if(bridge) bridge.send('hotkey',`${key}|${mask}`);},
-    onClose:()=>{if(bridge) bridge.send('__escapecapture','0');input.focus();render();}
+    onClose:()=>{heldModifiers=0;if(bridge) bridge.send('__escapecapture','0');input.focus();render();}
   });
   window.ncCommandsBegin = function(payload) {const count=Number(payload); commandsCount=Number.isInteger(count)&&count>=-3&&count<=1024?count:-2; commandsParts=commandsCount>=0 ? new Array(commandsCount) : [];};
   window.ncCommandsChunk = function(payload) {const text=String(payload),split=text.indexOf('|'),i=Number(text.slice(0,split)); if(split>=0&&Number.isInteger(i)&&i>=0&&i<commandsCount) commandsParts[i]=text.slice(split+1);};
