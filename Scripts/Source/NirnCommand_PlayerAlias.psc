@@ -616,7 +616,8 @@ Function ScanCatalog()
         while i < total && scanEpoch == _epoch
             Form item = inventory[i]
             if item && item.GetName() != ""
-                StorageUtil.FormListAdd(player, list, item, false)
+                ; The native inventory snapshot contains one entry per base form.
+                StorageUtil.FormListAdd(player, list, item)
             endif
             i += 1
             if i % 40 == 0
@@ -630,7 +631,8 @@ Function ScanCatalog()
         while i < total && scanEpoch == _epoch
             Form item = existing[i]
             if item && !(item as Spell)
-                StorageUtil.FormListAdd(player, list, item, false)
+                ; The active generation already contains unique base forms.
+                StorageUtil.FormListAdd(player, list, item)
             endif
             i += 1
         endwhile
