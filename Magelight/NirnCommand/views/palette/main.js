@@ -232,31 +232,45 @@
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
   window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
   window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
-  let catalogSession='';
+  let catalogSession='', catalogTransferSerial=0;
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : ''; modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : ''; modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
     if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
     if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
   };
-  let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null;
-  window.ncCatalogBegin = function(value) { const framed=catalogFrame(value); if(framed===null) return; epoch=framed; incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); };
+  let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null, catalogProgress=0;
+  function watchCatalogTransfer() {
+    const serial=++catalogTransferSerial;
+    catalogProgress=Date.now();
+    function check() {
+      if(serial!==catalogTransferSerial) return;
+      const remaining=30000-(Date.now()-catalogProgress);
+      if(remaining>0) {setTimeout(check,remaining);return;}
+      catalogTransferSerial++; incoming=[]; catalogFragment=null; epoch='';
+      statusEl.textContent='Catalog transfer timed out';
+      console.warn('[NirnCommand] Catalog transfer timed out; requesting snapshot');
+      if(bridge) bridge.send('catalog','snapshot');
+    }
+    setTimeout(check,30000);
+  }
+  window.ncCatalogBegin = function(value) { const framed=catalogFrame(value); if(framed===null) return; epoch=framed; incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); watchCatalogTransfer(); };
   window.ncDeltaBegin = function(payload) {
     const framed=catalogFrame(payload); if(framed===null) return;
     const [base,next]=framed.split('|');
     if(base!==epoch || !next) {catalogInvalid=true;if(bridge) bridge.send('catalog','snapshot');return;}
     incoming=discovered.map(entry=>({...entry,action:entry.action.replace(/^(item|spell):[^:]+:/,`$1:${next}:`)}));
-    epoch=next; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now();
+    epoch=next; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); watchCatalogTransfer();
   };
   window.ncDeltaRemove = function(payload) {
     const framed=catalogFrame(payload); if(framed===null) return;
     const [generation,sequence,formId]=framed.split('|');
     if(generation!==epoch) return;
     if(Number(sequence)!==catalogBatches || !/^-?\d+$/.test(formId)) {catalogInvalid=true;return;}
-    incoming=incoming.filter(entry=>entry.action!==`item:${generation}:${formId}`); catalogBatches++;
+    incoming=incoming.filter(entry=>entry.action!==`item:${generation}:${formId}`); catalogBatches++; catalogProgress=Date.now();
   };
-  window.ncCatalogBatch = function(payload) { const text=catalogFrame(payload); if(text===null) return; const a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0) {catalogInvalid=true; return;} if(text.slice(0,a)!==epoch) return; if(Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++;} catch (_) {catalogInvalid=true;} };
+  window.ncCatalogBatch = function(payload) { const text=catalogFrame(payload); if(text===null) return; const a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0) {catalogInvalid=true; return;} if(text.slice(0,a)!==epoch) return; if(Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++; catalogProgress=Date.now();} catch (_) {catalogInvalid=true;} };
   window.ncCatalogFragment = function(payload) {
     const text=catalogFrame(payload); if(text===null) return; let cursor=0, fields=[];
     for(let i=0;i<4;i++) {const next=text.indexOf('|',cursor); if(next<0) {catalogInvalid=true;return;} fields.push(text.slice(cursor,next));cursor=next+1;}
@@ -265,14 +279,14 @@
     if(Number(sequence)!==catalogBatches || !Number.isInteger(index) || !Number.isInteger(total) || total<1 || total>4096 || index<0 || index>=total) {catalogInvalid=true;return;}
     if(index===0 && !catalogFragment) catalogFragment={parts:[],total};
     if(!catalogFragment || catalogFragment.total!==total || catalogFragment.parts.length!==index) {catalogInvalid=true;return;}
-    catalogFragment.parts.push(text.slice(cursor)); catalogBatches++;
+    catalogFragment.parts.push(text.slice(cursor)); catalogBatches++; catalogProgress=Date.now();
     if(catalogFragment.parts.length===total) {
       try {const row=JSON.parse(catalogFragment.parts.join(''));if(!Array.isArray(row)||row.length!==4||row.some(x=>typeof x!=='string')) throw Error('Invalid entry');window.ncAddEntry(row.join('|'));}
       catch (_) {catalogInvalid=true;}
       catalogFragment=null;
     }
   };
-  window.ncCatalogComplete = function(value) { const framed=catalogFrame(value); if(framed===null) return; const [received,count]=framed.split('|'); if(received!==epoch) return; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];statusEl.textContent='Catalog transfer incomplete'; if(bridge) setTimeout(()=>bridge.send('catalog','snapshot'),1000);return;} discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge) bridge.send('catalog','applied|' + (catalogSession?catalogSession+'|':'') + epoch); };
+  window.ncCatalogComplete = function(value) { const framed=catalogFrame(value); if(framed===null) return; const [received,count]=framed.split('|'); if(received!==epoch) return; catalogTransferSerial++; if(count!==undefined && (catalogInvalid || catalogFragment || Number(count)!==catalogBatches)) {incoming=[];epoch='';statusEl.textContent='Catalog transfer incomplete'; if(bridge) setTimeout(()=>bridge.send('catalog','snapshot'),1000);return;} discovered=incoming; incoming=[]; console.info(`[NirnCommand] Catalog applied entries=${discovered.length} batches=${catalogBatches} milliseconds=${Date.now()-catalogTransferStarted}`); statusEl.textContent='Catalog ready'; render(); if(bridge) bridge.send('catalog','applied|' + (catalogSession?catalogSession+'|':'') + epoch); };
   window.ncAddEntry = function(payload) {
     const text=String(payload || ''), a=text.indexOf('|'), b=text.indexOf('|',a+1), c=text.indexOf('|',b+1);
     if (a<0 || b<0 || c<0) return; const type=text.slice(0,a), token=text.slice(a+1,b), id=text.slice(b+1,c), name=text.slice(c+1);
