@@ -4,8 +4,17 @@
 #include "storage.h"
 
 namespace {
+    std::filesystem::path DataDirectory()
+    {
+        std::wstring path(32768, L'\0');
+        const auto length=GetModuleFileNameW(nullptr,path.data(),static_cast<DWORD>(path.size()));
+        if (!length || length >= path.size()) return {};
+        path.resize(length);
+        return std::filesystem::path(path).parent_path() / "Data";
+    }
+    const auto dataDirectory=DataDirectory();
     std::mutex hotkeyMutex;
-    const std::filesystem::path hotkeyFile = "Data/SKSE/Plugins/NirnCommand/hotkey.json";
+    const auto hotkeyFile = dataDirectory.empty() ? std::filesystem::path{} : dataDirectory / "SKSE/Plugins/NirnCommand/hotkey.json";
     std::int32_t GetHotkey(RE::StaticFunctionTag*, std::int32_t part)
     {
         std::scoped_lock lock(hotkeyMutex);
@@ -16,18 +25,19 @@ namespace {
     bool SetHotkey(RE::StaticFunctionTag*, std::int32_t key, std::int32_t modifiers)
     {
         std::scoped_lock lock(hotkeyMutex);
-        return nirn::write_hotkey(hotkeyFile,key,modifiers);
+        return !hotkeyFile.empty() && nirn::write_hotkey(hotkeyFile,key,modifiers);
     }
     std::mutex commandsMutex;
     std::vector<std::string> commandChunks;
     std::string commandWrite;
     bool commandOverflow = false;
-    const std::filesystem::path commandFile = "Data/SKSE/Plugins/NirnCommand/commands.json";
+    const auto commandFile = dataDirectory.empty() ? std::filesystem::path{} : dataDirectory / "SKSE/Plugins/NirnCommand/commands.json";
     std::int32_t LoadCommands(RE::StaticFunctionTag*)
     {
         std::scoped_lock lock(commandsMutex);
         commandChunks.clear();
         std::string data;
+        if (commandFile.empty()) return -2;
         auto result=nirn::read_commands(commandFile, data);
         if (result == 1) return -1;
         if (result != 0) return -2;
@@ -56,14 +66,15 @@ namespace {
     bool CommitCommandsWrite(RE::StaticFunctionTag*)
     {
         std::scoped_lock lock(commandsMutex);
-        return !commandOverflow && nirn::write_commands(commandFile,commandWrite);
+        return !commandFile.empty() && !commandOverflow && nirn::write_commands(commandFile,commandWrite);
     }
     std::mutex discoveryMutex;
     std::vector<std::string> discoveryEntries;
     void RefreshDiscovery(RE::StaticFunctionTag*)
     {
-        auto entries = nirn::discover_mcm("Data");
-        auto oar = nirn::discover_oar("Data");
+        if (dataDirectory.empty()) return;
+        auto entries = nirn::discover_mcm(dataDirectory);
+        auto oar = nirn::discover_oar(dataDirectory);
         entries.insert(entries.end(), oar.begin(), oar.end());
         std::scoped_lock lock(discoveryMutex);
         discoveryEntries = std::move(entries);
