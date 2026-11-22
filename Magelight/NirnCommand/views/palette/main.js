@@ -226,7 +226,7 @@
       usage[entry.id].lastResult=result; save('usage',usage);
     }
   };
-  window.ncHotkey = function(payload) { const [key,mask]=String(payload).split('|').map(Number); if(Number.isInteger(key) && Number.isInteger(mask)) openingHotkey={key,mask}; };
+  window.ncHotkey = function(payload) { const [key,mask]=String(payload).split('|').map(Number); if(Number.isInteger(key) && Number.isInteger(mask)) {openingHotkey={key,mask};editor?.hotkeyState(openingHotkey);} };
   window.ncHotkeyResult = function(payload) { const [request,result]=String(payload).split('|'); if(request!==hotkeyPending?.request) return; const {session}=hotkeyPending; hotkeyPending=null; editor?.hotkeyResult(result==='ok',session); statusEl.textContent=result==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
   window.ncCapabilities = function(payload) { capabilities=String(payload).split('|').map(value=>value==='1'); render(); };
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
