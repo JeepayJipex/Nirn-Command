@@ -20,6 +20,17 @@ int main()
         auto chunks=nirn::split_utf8(original,8);std::string joined;
         for(const auto& chunk:chunks) {require(chunk.size()<=8,"chunk size");joined+=chunk;}
         require(joined==original,"chunk data changed");
+        std::string longText;
+        for (int i=0; i<500; ++i) longText += "É😀";
+        auto longChunks=nirn::split_utf8(longText,800);
+        require(longChunks.size()>1,"long entry was not fragmented");
+        joined.clear();
+        for(const auto& chunk:longChunks) {
+            require(chunk.size()<=800,"oversized UTF-8 fragment");
+            require((static_cast<unsigned char>(chunk.front()) & 0xc0)!=0x80,"fragment begins inside a UTF-8 character");
+            joined+=chunk;
+        }
+        require(joined==longText,"long UTF-8 entry changed");
         std::ofstream(file,std::ios::binary|std::ios::trunc)<<"bad";
         require(nirn::read_commands(file,out)==2,"corruption accepted");
         int key=0, modifiers=0;
