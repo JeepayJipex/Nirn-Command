@@ -240,12 +240,13 @@
   };
   let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null;
   window.ncCatalogBegin = function(value) { epoch=String(value); incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); };
-  window.ncCatalogBatch = function(payload) { const text=String(payload), a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0 || text.slice(0,a)!==epoch || Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++;} catch (_) {catalogInvalid=true;} };
+  window.ncCatalogBatch = function(payload) { const text=String(payload), a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0) {catalogInvalid=true; return;} if(text.slice(0,a)!==epoch) return; if(Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++;} catch (_) {catalogInvalid=true;} };
   window.ncCatalogFragment = function(payload) {
     const text=String(payload); let cursor=0, fields=[];
     for(let i=0;i<4;i++) {const next=text.indexOf('|',cursor); if(next<0) {catalogInvalid=true;return;} fields.push(text.slice(cursor,next));cursor=next+1;}
     const [generation,sequence,part,count]=fields; const index=Number(part), total=Number(count);
-    if(generation!==epoch || Number(sequence)!==catalogBatches || !Number.isInteger(index) || !Number.isInteger(total) || total<1 || total>4096 || index<0 || index>=total) {catalogInvalid=true;return;}
+    if(generation!==epoch) return;
+    if(Number(sequence)!==catalogBatches || !Number.isInteger(index) || !Number.isInteger(total) || total<1 || total>4096 || index<0 || index>=total) {catalogInvalid=true;return;}
     if(index===0 && !catalogFragment) catalogFragment={parts:[],total};
     if(!catalogFragment || catalogFragment.total!==total || catalogFragment.parts.length!==index) {catalogInvalid=true;return;}
     catalogFragment.parts.push(text.slice(cursor)); catalogBatches++;
