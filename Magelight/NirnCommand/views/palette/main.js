@@ -242,6 +242,20 @@
   };
   let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null;
   window.ncCatalogBegin = function(value) { const framed=catalogFrame(value); if(framed===null) return; epoch=framed; incoming=[]; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now(); };
+  window.ncDeltaBegin = function(payload) {
+    const framed=catalogFrame(payload); if(framed===null) return;
+    const [base,next]=framed.split('|');
+    if(base!==epoch || !next) {catalogInvalid=true;if(bridge) bridge.send('catalog','snapshot');return;}
+    incoming=discovered.map(entry=>({...entry,action:entry.action.replace(/^(item|spell):[^:]+:/,`$1:${next}:`)}));
+    epoch=next; catalogBatches=0; catalogInvalid=false; catalogFragment=null; catalogTransferStarted=Date.now();
+  };
+  window.ncDeltaRemove = function(payload) {
+    const framed=catalogFrame(payload); if(framed===null) return;
+    const [generation,sequence,formId]=framed.split('|');
+    if(generation!==epoch) return;
+    if(Number(sequence)!==catalogBatches || !/^-?\d+$/.test(formId)) {catalogInvalid=true;return;}
+    incoming=incoming.filter(entry=>entry.action!==`item:${generation}:${formId}`); catalogBatches++;
+  };
   window.ncCatalogBatch = function(payload) { const text=catalogFrame(payload); if(text===null) return; const a=text.indexOf('|'), b=text.indexOf('|',a+1); if(a<0 || b<0) {catalogInvalid=true; return;} if(text.slice(0,a)!==epoch) return; if(Number(text.slice(a+1,b))!==catalogBatches || catalogFragment) {catalogInvalid=true; return;} try {for(const line of text.slice(b+1).split('\n')) {const row=JSON.parse(line); if(!Array.isArray(row) || row.length!==4 || row.some(x=>typeof x!=='string')) throw Error('Invalid entry'); window.ncAddEntry(row.join('|'));} catalogBatches++;} catch (_) {catalogInvalid=true;} };
   window.ncCatalogFragment = function(payload) {
     const text=catalogFrame(payload); if(text===null) return; let cursor=0, fields=[];

@@ -574,6 +574,75 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     endif
 EndFunction
 
+bool Function PublishInventoryDelta(Form[] changed, int nextSlot, int nextEpoch)
+    if !_domReady || _sending || _activeEpoch == 0 || _uiEpoch != _activeEpoch || changed.Length == 0 || changed.Length > 8
+        return false
+    endif
+    Actor player = Game.GetPlayer()
+    string oldList = "NirnCommand.Forms" + _slot
+    string newList = "NirnCommand.Forms" + nextSlot
+    int i = 0
+    int expectedCount = StorageUtil.FormListCount(player, oldList)
+    while i < changed.Length
+        Form item = changed[i]
+        if !item
+            return false
+        endif
+        bool oldPresent = StorageUtil.FormListFind(player, oldList, item) >= 0
+        bool newPresent = StorageUtil.FormListFind(player, newList, item) >= 0
+        if oldPresent && !newPresent
+            expectedCount -= 1
+        elseif !oldPresent && newPresent
+            expectedCount += 1
+        endif
+        if !oldPresent && newPresent
+            string row = NirnCommandNative.CatalogEntry("item", nextEpoch + ":" + item.GetFormID(), PersistentKey(item, "item"), item.GetName())
+            if StringUtil.GetLength(row) > 800
+                return false
+            endif
+        endif
+        i += 1
+    endwhile
+    if expectedCount != StorageUtil.FormListCount(player, newList)
+        return false
+    endif
+    _sending = true
+    int oldEpoch = _activeEpoch
+    int viewGeneration = _viewGeneration
+    int sendView = _viewId
+    Magelight.Call(sendView, "ncDeltaBegin", _catalogSession + "|" + oldEpoch + "|" + nextEpoch)
+    int sequence = 0
+    i = 0
+    while i < changed.Length && viewGeneration == _viewGeneration && _domReady
+        Form item = changed[i]
+        if item
+            bool wasPresent = StorageUtil.FormListFind(player, oldList, item) >= 0
+            bool isPresent = StorageUtil.FormListFind(player, newList, item) >= 0
+            if wasPresent && !isPresent
+                Magelight.Call(sendView, "ncDeltaRemove", _catalogSession + "|" + nextEpoch + "|" + sequence + "|" + item.GetFormID())
+                sequence += 1
+            elseif !wasPresent && isPresent
+                string row = NirnCommandNative.CatalogEntry("item", nextEpoch + ":" + item.GetFormID(), PersistentKey(item, "item"), item.GetName())
+                Magelight.Call(sendView, "ncCatalogBatch", _catalogSession + "|" + nextEpoch + "|" + sequence + "|" + row)
+                sequence += 1
+            endif
+        endif
+        i += 1
+    endwhile
+    bool success = viewGeneration == _viewGeneration && _domReady && sendView == _viewId
+    if success
+        _previousEpoch = oldEpoch
+        _previousSlot = _slot
+        _slot = nextSlot
+        _activeEpoch = nextEpoch
+        _lastScan = Utility.GetCurrentRealTime()
+        Magelight.Call(sendView, "ncCatalogComplete", _catalogSession + "|" + nextEpoch + "|" + sequence)
+        Debug.Trace("[NirnCommand] Inventory delta operations=" + sequence)
+    endif
+    _sending = false
+    return success
+EndFunction
+
 bool Function SpellCatalogChanged()
     Actor player = Game.GetPlayer()
     string candidate = "NirnCommand.SpellCheck"
@@ -734,7 +803,13 @@ Function ScanCatalog()
             endif
             _scanning = false
         elseif !_sending && !Magelight.IsUIModeActive()
-            PublishCatalog(nextSlot, scanEpoch, true)
+            bool deltaPublished = false
+            if changed.Length > 0 && !SpellCatalogChanged()
+                deltaPublished = PublishInventoryDelta(changed, nextSlot, scanEpoch)
+            endif
+            if !deltaPublished
+                PublishCatalog(nextSlot, scanEpoch, true)
+            endif
             if _activeEpoch == scanEpoch
                 StorageUtil.FormListCopy(player, "NirnCommand.SpellSnapshot", StorageUtil.FormListToArray(player, spellList))
             else
