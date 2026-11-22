@@ -34,7 +34,7 @@
   let fallbackReady=false, fallbackReading=false, fallbackDirty=false, fallbackWriting=false, fallbackSlot=0, fallbackParts=[], fallbackCount=0, fallbackRequest=0, fallbackPending=null;
   const fallbackTouched=new Set();
   let openingHotkey={key:210,mask:0};
-  let hotkeyPending=0;
+  let hotkeyPending=null;
   let commands=[], commandsReady=false, commandsReadStarted=false, commandsMissing=false, commandsCount=-2, commandsParts=[];
   let commandsDirty=false, commandsWriting=false, commandsSerial=0, commandsPending=null;
   function validCommands(value) {
@@ -68,7 +68,22 @@
     getCommands:()=>commands,
     setCommands:value=>{commands=validCommands(value);commandsDirty=true;render();flushCommands();},
     getHotkey:()=>openingHotkey,
-    setHotkey:(key,mask)=>{ if(!bridge || hotkeyPending) return; const request=String(++serial); hotkeyPending=Number(request); bridge.send('execute',`${request}|hotkey:${key}|${mask}`); setTimeout(()=>{if(hotkeyPending===Number(request)) {hotkeyPending=0; editor?.hotkeyResult(false); statusEl.textContent='Shortcut result unconfirmed'; bridge.send('execute',`${++serial}|hotkey:get`);}},5000); },
+    setHotkey:(key,mask,session)=>{
+      if(!bridge) {statusEl.textContent='Shortcut bridge unavailable'; return false;}
+      if(hotkeyPending) {statusEl.textContent='Shortcut save already pending'; return false;}
+      const request=String(++serial);
+      hotkeyPending={request,session};
+      try { bridge.send('execute',`${request}|hotkey:${key}|${mask}`); }
+      catch (_) {hotkeyPending=null; statusEl.textContent='Shortcut bridge unavailable'; return false;}
+      setTimeout(()=>{
+        if(hotkeyPending?.request!==request) return;
+        hotkeyPending=null;
+        editor?.hotkeyResult('timeout',session);
+        statusEl.textContent='Shortcut result unconfirmed';
+        bridge.send('execute',`${++serial}|hotkey:get`);
+      },5000);
+      return true;
+    },
     onClose:()=>{heldModifiers=0;if(bridge) bridge.send('__escapecapture','0');input.focus();render();}
   });
   window.ncCommandsBegin = function(payload) {const count=Number(payload); commandsCount=Number.isInteger(count)&&count>=-3&&count<=1024?count:-2; commandsParts=commandsCount>=0 ? new Array(commandsCount) : [];};
@@ -208,7 +223,7 @@
     }
   };
   window.ncHotkey = function(payload) { const [key,mask]=String(payload).split('|').map(Number); if(Number.isInteger(key) && Number.isInteger(mask)) openingHotkey={key,mask}; };
-  window.ncHotkeyResult = function(payload) { const [request,result]=String(payload).split('|'); if(Number(request)!==hotkeyPending) return; hotkeyPending=0; editor?.hotkeyResult(result==='ok'); statusEl.textContent=result==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
+  window.ncHotkeyResult = function(payload) { const [request,result]=String(payload).split('|'); if(request!==hotkeyPending?.request) return; const {session}=hotkeyPending; hotkeyPending=null; editor?.hotkeyResult(result==='ok',session); statusEl.textContent=result==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
   window.ncCapabilities = function(payload) { capabilities=String(payload).split('|').map(value=>value==='1'); render(); };
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
   window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
