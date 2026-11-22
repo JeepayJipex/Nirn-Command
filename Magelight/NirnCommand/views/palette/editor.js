@@ -63,7 +63,7 @@ window.NirnEditor = (() => {
         if(capture) {message('Finish or cancel key capture first.'); return;}
         if(mode==='hotkey') {
           if(!shortcut || shortcut.key===1 || shortcut.key===201) {message('Choose a key other than Escape or Page Up.'); return;}
-          if(options.setHotkey(shortcut.key,shortcut.mask,session)!==false) message('Saving shortcut…'); return;
+          if(options.setHotkey(shortcut.key,shortcut.mask,session)!==false) message('Saving shortcut…'); else message('Shortcut save unavailable or already pending'); return;
         }
         const label=get('name').value.trim(), type=get('type').value;
         if(!label) {message('Enter a name.'); return;}

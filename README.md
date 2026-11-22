@@ -1,10 +1,10 @@
-# Nirn Command v0.3.0 — Personal All-in
+# Nirn Command v0.3.1 — Personal All-in
 
 Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with **Insert** by default, search, navigate with the arrow keys and press Enter. Ctrl+Enter equips a spell in the left hand; Ctrl+D or the star toggles a favorite.
 
 ## Installation
 
-1. Install `NirnCommand-v0.3.0-Personal-AllIn.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+1. Install `NirnCommand-v0.3.1-Personal-AllIn.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
 2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet and Open Animation Replacer are optional.
 3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
@@ -12,7 +12,7 @@ The DLL is built for Skyrim SE 1.5.97 and AE 1.6.1170, not VR. Use matching vers
 
 ## Actions and discovery
 
-The player inventory and known spells are cached in the background. Inventory changes trigger a refresh; periodic reconciliation catches changes that do not generate an event. Searches keep using the last completed catalog during a refresh. A newly loaded save starts with an empty catalog while its own catalog is prepared. **Nirn Command — Refresh catalog** requests another background refresh.
+The player inventory and known spells are cached in the background. Base spells and spells added to the actor are combined. Inventory events update changed forms, while the periodic check reconciles known spells. A manual refresh rebuilds the inventory snapshot. Searches keep using the last completed catalog during a refresh. A newly loaded save starts with an empty catalog while its own catalog is prepared. **Nirn Command — Refresh catalog** requests another background refresh.
 
 Enter equips or uses a listed item, or equips a spell in the right hand. The action verifies the item or spell is still available. Individual instances of the same base item are not distinguished. Type `> tgm` or another console command and press Enter to send it. Console and simulated shortcut actions report **sent**: delivery to another mod is not proof that it acted.
 

@@ -479,6 +479,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
         return
     endif
     _sending = true
+    float transferStarted = Utility.GetCurrentRealTime()
     int scanEpoch = _epoch
     int sendView = _viewId
     int viewGeneration = _viewGeneration
@@ -528,6 +529,7 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
                 batchIndex += 1
             endif
             Magelight.Call(sendView, "ncCatalogComplete", sendEpoch + "|" + batchIndex)
+            Debug.Trace("[NirnCommand] Catalog transfer entries=" + total + " batches=" + batchIndex + " seconds=" + (Utility.GetCurrentRealTime() - transferStarted))
         endif
     elseif commit && scanEpoch == _epoch
         _dirty = true
@@ -549,6 +551,7 @@ Function ScanCatalog()
         return
     endif
     _scanning = true
+    float scanStarted = Utility.GetCurrentRealTime()
     _dirty = false
     _epoch += 1
     int scanEpoch = _epoch
@@ -601,6 +604,8 @@ Function ScanCatalog()
             i += 1
         endwhile
     endif
+    float inventorySeconds = Utility.GetCurrentRealTime() - scanStarted
+    float spellsStarted = Utility.GetCurrentRealTime()
     i = 0
     total = player.GetSpellCount()
     while i < total && scanEpoch == _epoch
@@ -629,6 +634,7 @@ Function ScanCatalog()
         endwhile
     endif
     if scanEpoch == _epoch
+        Debug.Trace("[NirnCommand] Catalog scan inventorySeconds=" + inventorySeconds + " spellsSeconds=" + (Utility.GetCurrentRealTime() - spellsStarted) + " entries=" + StorageUtil.FormListCount(player, list))
         bool identical = _activeEpoch != 0 && StorageUtil.FormListCount(player, list) == StorageUtil.FormListCount(player, "NirnCommand.Forms" + _slot)
         i = 0
         while identical && i < StorageUtil.FormListCount(player, list)

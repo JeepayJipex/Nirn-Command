@@ -6,3 +6,6 @@
 - Background catalog scans use base forms and do not distinguish individual enchanted instances. Spell filtering does not fully classify modded powers or passive effects. Timings and gameplay impact have not been measured in game.
 - Refresh and load transitions, modifier capture, MO2 virtual filesystem behavior, global preference files and Unicode have automated checks but need observation during play.
 - A custom Magelight host toggle key may differ from Page Up; avoid binding Nirn Command to the same combination. Other mods and Skyrim may also receive the opening key.
+
+- Version 0.3.1 has automated checks only. Runtime timing, MO2 virtual filesystem behavior, spell availability and hotkey persistence need observation in a game session.
+- Catalog and transfer timings are logged in Papyrus and Magelight. They are not measurements of the prior build or proof of a particular speedup.
