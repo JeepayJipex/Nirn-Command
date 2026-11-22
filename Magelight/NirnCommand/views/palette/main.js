@@ -244,7 +244,7 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : ''; modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
     if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }

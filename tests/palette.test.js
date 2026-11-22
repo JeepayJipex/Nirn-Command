@@ -24,6 +24,7 @@ const context=vm.createContext({window,document,localStorage,Set,Map,Date:FakeDa
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),context);
 const key=(key,extra={})=>handlers.keydown({key,code:key,ctrlKey:false,isComposing:false,preventDefault(){},...extra});
 const search=value=>{input.value=value; input.listeners.input();};
+window.ncGameLoaded('controller-session'); window.ncBridgeReady(); assert.ok(sent.some(message=>message[0]==='catalog' && message[1]==='ready|controller-session')); sent.length=0; window.ncGameLoaded();
 handlers.__uimode('1'); assert.equal(sent.length,0);
 window.ncCatalogBegin('7'); window.ncAddEntry('spell|7:0|game:spell:Skyrim.esm:42|Fireball'); window.ncAddEntry('item|6:2|game:item:Skyrim.esm:7|Stale Sword'); window.ncCatalogComplete('6');
 search('Stale'); assert.equal(results.children[0].textContent,'No results.');

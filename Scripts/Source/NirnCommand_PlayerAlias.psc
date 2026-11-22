@@ -163,7 +163,8 @@ Function Connect()
             _viewId = 0
             return
         endif
-        Magelight.Call(_viewId, "ncGameLoaded", "new")
+        _catalogSession = _viewGeneration + "-" + _epoch + "-" + Utility.GetCurrentRealTime()
+        Magelight.Call(_viewId, "ncGameLoaded", _catalogSession)
         SendCapabilities()
         Magelight.BindHotkey(_viewId, 0, 0)
         Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
@@ -484,10 +485,13 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         if readySession == ""
             return
         endif
-        if _domReady && _catalogSession == readySession
+        if readySession != _catalogSession
+            Debug.Trace("[NirnCommand] Catalog ready rejected stale session=" + readySession)
             return
         endif
-        _catalogSession = readySession
+        if _domReady
+            return
+        endif
         _domReady = true
         Debug.Trace("[NirnCommand] Catalog ready session=" + _catalogSession + " epoch=" + _activeEpoch)
         SendCatalog()
