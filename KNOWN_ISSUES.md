@@ -1,9 +1,8 @@
-# Known issues
+# Known issues and verification limits
 
-- This build has not been tested in Skyrim. Its startup, UI focus, actions, persistence, and save/load behavior remain unverified in game.
-- The design targets Skyrim 1.6.1170; the inspected local Nolvus profile uses 1.5.97. Runtime compatibility has not been established for either executable.
-- OAR shortcut simulation is experimental. Detecting a key in an INI does not establish that OAR accepts simulated input, and the scanner currently detects OAR only.
-- The catalog uses base forms; it does not identify individual enchanted instances. Spell filtering checks ownership, a name and an equip slot; it does not fully classify modded powers or passive effects.
-- Magelight localStorage is installation-wide, not tied to a character. The PapyrusUtil JSON fallback is also global and has passed offline protocol tests only; its persistence and Unicode handling still need in-game verification.
-- Long catalog scans are divided into batches, but throughput and behavior while Magelight pauses the game have not been measured in the target runtime.
-- Optional integration availability depends on the SKSE plugin names registered at runtime. If a known-installed integration is reported unavailable, provide logs.
+- This version has not been run in Skyrim. Startup, input focus, simulated shortcuts, native API calls, persistence and save transitions remain unverified in game.
+- The native DLL is intended for SE 1.5.97 and AE 1.6.1170. Automated compilation cannot establish runtime compatibility with either executable or a particular mod list.
+- Discovery covers known native integrations and declared MCM Helper bindings. It cannot enumerate every Papyrus or SKSE shortcut, prove that a configuration was loaded, or guarantee simulated keys are received. The OAR V3 API is preferred when available.
+- Background catalog scans use base forms and do not distinguish individual enchanted instances. Spell filtering does not fully classify modded powers or passive effects. Timings and gameplay impact have not been measured in game.
+- Refresh and load transitions, modifier capture, MO2 virtual filesystem behavior, global preference files and Unicode have automated checks but need observation during play.
+- A custom Magelight host toggle key may differ from Page Up; avoid binding Nirn Command to the same combination. Other mods and Skyrim may also receive the opening key.

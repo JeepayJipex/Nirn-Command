@@ -1,6 +1,10 @@
 #include "storage.h"
 #include <nlohmann/json.hpp>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 

@@ -24,6 +24,11 @@ int main()
           {"id":"open","desc":"Open menu","action":{"type":"CallFunction","form":"Example.esp|800","function":"Open"}},
           {"id":"broken","desc":"No action","action":{"type":"CallFunction"}},
           {"id":"unbound","desc":"Not mapped","action":{"type":"RunConsoleCommand","command":"tgm"}}]})");
+        write(root / "SKSE/Plugins/OpenAnimationReplacer.ini", "[UI]\nbEnableUI=true\nuToggleUIKey=45\nuToggleUIKeyShift=1\nuToggleUIKeyCtrl=0\nuToggleUIKeyAlt=1\n");
+        auto oar=nirn::discover_oar(root);
+        require(oar.size()==1 && nlohmann::json::parse(oar[0])["action"]=="shortcut2:45:17", "OAR configured mapping");
+        write(root / "SKSE/Plugins/OpenAnimationReplacer.ini", "[UI]\nuToggleUIKey=45\n");
+        require(nirn::discover_oar(root).empty(), "incomplete OAR settings must not invent a binding");
         auto entries=nirn::discover_mcm(root);
         require(entries.size()==1,"only mapped declared actions should appear");
         auto entry=nlohmann::json::parse(entries[0]);

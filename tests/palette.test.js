@@ -32,9 +32,19 @@ window.ncActionResult('1|sent'); assert.equal(JSON.parse(store.get('nirn-command
 key('d',{ctrlKey:true}); assert.ok(JSON.parse(store.get('nirn-command:v1:favorites')).includes('game:spell:Skyrim.esm:42'));
 window.ncCapabilities('0|0|0'); search('> player.additem f 1'); key('Enter'); assert.equal(sent.length,0); assert.equal(status.textContent,'Action unavailable');
 window.ncCapabilities('1|1|1'); key('Enter',{isComposing:true}); assert.equal(sent.length,0); key('Enter'); assert.deepEqual(sent.pop(),['execute','2|console: player.additem f 1']);
-window.ncCatalogBegin('8'); window.ncCatalogComplete('8'); search('fireball'); assert.equal(results.children.length,1); assert.equal(results.children[0].children[1].children[0].textContent,'Fireball Camera');
+window.ncCatalogBegin('8'); search('fireball'); assert.equal(results.children[0].children[1].children[0].textContent,'Fireball'); window.ncCatalogComplete('8'); search('fireball'); assert.equal(results.children.length,1); assert.equal(results.children[0].children[1].children[0].textContent,'Fireball Camera');
 window.ncGameLoaded(); search('fireball'); assert.equal(results.children.length,1);
 console.log('UI protocol, stale catalog, ranking, favorites, IME and availability checks passed.');
+window.ncCapabilities('1|1|0|1');
+window.ncDiscoveryBegin();
+window.ncDiscoveryEntry(JSON.stringify({id:'mcm:Example:open',label:'Example — Open',kind:'Mod',action:'shortcut2:37:0',source:'MCM/Settings/keybinds.json',confidence:'configured association'}));
+window.ncDiscoveryEntry(JSON.stringify({id:'mcm:Example:fake',label:'Unmapped',kind:'Mod',action:'console:tgm'}));
+window.ncDiscoveryEntry(JSON.stringify({id:'oar:configured',label:'OAR configured',kind:'Mod',action:'shortcut2:45:17',source:'OpenAnimationReplacer.ini',confidence:'configuration only'}));
+window.ncDiscoveryComplete();search('Example');assert.equal(results.children[0].children[1].children[0].textContent,'Example — Open');assert.match(results.children[0].title,/MCM/);
+search('Unmapped');assert.equal(results.children[0].textContent,'No results.');
+search('OAR configured');assert.equal(results.children[0].children[1].children[0].textContent,'OAR configured');
+window.ncCapabilities('1|1|1|1');search('OAR configured');assert.equal(results.children[0].textContent,'No results.');
+console.log('Discovered source, action validation, and OAR preference checks passed.');
 // Verify the persistent fallback sends bounded UTF-8 chunks and commits them in order.
 const sent2=[], handlers2={}, results2=new Element(), input2=new Element('input'), status2=new Element();
 const selectors2={'#query':input2,'#results':results2,'#meta':new Element(),'#status':status2};

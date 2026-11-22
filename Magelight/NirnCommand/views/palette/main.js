@@ -141,7 +141,7 @@
       const pos = q.indexOf('>'), raw = q.slice(pos + 1);
       return raw.trim() ? [{ id:'direct:' + raw, label:'Run: ' + raw, detail:'Console command', kind:'Console', action:'console:' + raw, transient:true }] : [];
     }
-    const entries = statics.concat(commands, modDiscovered, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
+    const entries = statics.concat(commands, modDiscovered, discovered).filter(entry => entry.id!=='oar:configured' || (capabilities && capabilities[3] && !capabilities[2])).filter(entry => settings.showUnavailable !== false || available(entry));
     if (!query) {
       const byId = new Map(entries.map(e => [e.id, e]));
       const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...commands.map(e => e.id)];
@@ -210,7 +210,7 @@
   window.ncHotkeyResult = function(payload) { editor?.hotkeyResult(payload==='ok'); statusEl.textContent=payload==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
   window.ncCapabilities = function(payload) { capabilities=String(payload).split('|').map(value=>value==='1'); render(); };
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
-  window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && entry.id.startsWith('mcm:') && typeof entry.label==='string' && /^shortcut2:[0-9]+:0$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
+  window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
   window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
   window.ncGameLoaded = function() { modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {

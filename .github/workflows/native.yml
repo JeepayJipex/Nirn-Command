@@ -16,6 +16,7 @@ jobs:
         with:
           path: ${{ github.workspace }}/build/native/vcpkg_installed
           key: native-vcpkg-${{ runner.os }}-${{ hashFiles('native/vcpkg.json', 'native/vcpkg-configuration.json', 'native/vcpkg-ports/**') }}
+          restore-keys: native-vcpkg-${{ runner.os }}-
       - name: Configure
         shell: pwsh
         run: |
@@ -36,6 +37,18 @@ jobs:
         run: |
           ctest --test-dir build/native -C Release --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Collect dependency licenses
+        shell: pwsh
+        run: |
+          $share = Join-Path $PWD 'build/native/vcpkg_installed/x64-windows-static/share'
+          $licenses = Join-Path $PWD 'build/native/licenses'
+          foreach ($file in Get-ChildItem -LiteralPath $share -Filter copyright -Recurse) {
+            $name = $file.Directory.Name
+            $dest = Join-Path $licenses $name
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dest 'copyright')
+          }
+          if (!(Test-Path -LiteralPath (Join-Path $licenses 'commonlibsse-ng/copyright'))) { throw 'CommonLib license missing' }
       - name: Upload DLL and Papyrus source
         uses: actions/upload-artifact@v4
         with:
@@ -43,5 +56,6 @@ jobs:
           path: |
             build/native/Release/NirnCommandNative.dll
             Scripts/Source/NirnCommandNative.psc
+            build/native/licenses
           if-no-files-found: error
 

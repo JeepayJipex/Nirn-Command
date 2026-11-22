@@ -1,54 +1,41 @@
-# Nirn Command Personal All-in
+# Nirn Command v0.3.0 — Personal All-in
 
-Nirn Command is a compact in-game command palette for Skyrim Special Edition. Press **Insert**, type to search, use the arrow keys and Enter, then return to the game. Ctrl+Enter equips a spell in the left hand; Enter uses the right hand. Ctrl+D or the star toggles a favorite.
+Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with **Insert** by default, search, navigate with the arrow keys and press Enter. Ctrl+Enter equips a spell in the left hand; Ctrl+D or the star toggles a favorite.
 
 ## Installation
 
-1. Install `NirnCommand-Personal-AllIn.zip` as a separate mod in Mod Organizer 2 and enable `NirnCommand.esp`. Disable the previous Nirn Command prototype so that it does not override these files.
-2. Enable SKSE, Magelight UI 1.9.2 or newer, and PapyrusUtil. Console actions additionally need ConsoleUtilSSE NG. SkyrimNet and Open Animation Replacer are needed only for their corresponding actions.
-3. Launch Skyrim through the matching SKSE executable, load a save, and press Insert. A separate test save is recommended.
+1. Install `NirnCommand-v0.3.0-Personal-AllIn.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet and Open Animation Replacer are optional.
+3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
-The intended design target is Skyrim SE/AE 1.6.1170. The locally inspected Nolvus MO2 profile contains Skyrim 1.5.97. Use versions of SKSE and each dependency built for your actual executable. The package has not been run in Skyrim, and compatibility with either runtime is not yet verified.
+The DLL is built for Skyrim SE 1.5.97 and AE 1.6.1170, not VR. Use matching versions of every dependency. Automated builds do not establish that this release works in a Skyrim session; runtime behavior remains unverified until played.
 
-## Actions
+## Actions and discovery
 
-The catalog reads weapons, armor, potions and known spells from the current player. Enter equips an item or consumes a potion through the game; Ctrl+Enter selects the left hand for a spell. Favorites and recent use are stored globally by Magelight, not per save. A form that cannot be identified unambiguously cannot be favorited. Individual instances of the same base item are not distinguished.
+The player inventory and known spells are cached in the background. Inventory changes trigger a refresh; periodic reconciliation catches changes that do not generate an event. Searches keep using the last completed catalog during a refresh. A newly loaded save starts with an empty catalog while its own catalog is prepared. **Nirn Command — Refresh catalog** requests another background refresh.
 
-Type `> tgm` or another console command and press Enter to send it. Commands and travel presets execute only when selected. Console and simulated shortcuts report **sent**, not verified success. SkyrimNet entries call its native API. The OAR entry simulates the configured key and may not be received by the OAR DLL. Open OAR manually if needed.
+Enter equips or uses a listed item, or equips a spell in the right hand. The action verifies the item or spell is still available. Individual instances of the same base item are not distinguished. Type `> tgm` or another console command and press Enter to send it. Console and simulated shortcut actions report **sent**: delivery to another mod is not proof that it acted.
 
-Select **Nirn Command — Clear history** or **Clear favorites** twice within five seconds to clear the chosen list. Search for **Toggle unavailable actions** to show or hide commands whose dependencies were not detected, or **Refresh catalog** to request a new scan.
+SkyrimNet commands use its native hotkey APIs. Open Animation Replacer uses its UI V3 API when available. If that API is unavailable, a separate experimental simulated shortcut is offered only when OAR is loaded and its effective virtual INI explicitly identifies the key and modifiers. OAR 3.2.1 or later is needed for UI V3.
 
-If Magelight localStorage is unavailable, PapyrusUtil writes a global fallback under `Data/SKSE/Plugins/StorageUtilData/NirnCommand/preferences.json`; MO2 normally places generated files in Overwrite. This fallback is not save-specific.
+The background discovery reads MCM Helper's virtual `MCM/Settings/keybinds.json` together with matching `MCM/Config/<mod>/keybinds.json` definitions. It displays the configured action and source, and labels simulated execution as unverified. It never creates an action from a key alone. This is best-effort discovery: not all Papyrus registrations, SKSE plugins, custom formats, profile changes or keys held only in a save can be discovered. A file visible in MO2's virtual Data tree does not establish that a mod has loaded or reread it.
 
-## Custom commands
+## Customize in game
 
-Edit `Magelight/NirnCommand/views/palette/user-commands.js` in this mod. Keep stable unique IDs beginning with `user:`. For example:
+Search **Nirn Command — Manage commands** to create, edit or delete commands. Give each command a name and choose a captured keyboard shortcut, a console command, or a known integration. For capture, press the desired left or right modifiers first, then the main key. Escape cancels capture; Save applies it. The shortcut associated with a custom command is sent when the command is selected in the palette; it is not a global trigger.
 
-```js
-window.NIRN_USER_COMMANDS = [
-  { id: 'user:dragonreach', label: 'Travel — Dragonsreach', kind: 'Travel',
-    keywords: 'whiterun', action: 'console:coc WhiterunDragonsreach' },
-  { id: 'user:gold', label: 'Add 1000 gold', kind: 'Console',
-    action: 'console:player.additem f 1000' }
-];
-```
+On first use, valid entries from the old `user-commands.js` are imported once. Custom commands and the opening shortcut are stored globally under `Data/SKSE/Plugins/NirnCommand/` through MO2, usually in Overwrite. Preserve those files when changing profiles or replacing the mod. Favorites and history continue to use Magelight storage, with the previous PapyrusUtil fallback. None of these settings are character-specific.
 
-Reload the game to load edits. Duplicate IDs are ignored in favor of the earlier entry. Supported action prefixes are `console:`, `skyrimnet:` and `shortcut:<DirectInput key>:<modifier mask>`; modifier bits are Shift=1, Ctrl=2 and Alt=4. Only select commands you intend to execute. Files are loaded as JavaScript, so only edit or install trusted files.
-
-## Shortcut detection
-
-The optional `tools/scan-shortcuts.js` reads the enabled mods in an MO2 profile and writes a generated `scanned-commands.js`. It currently detects the highest-priority OAR INI binding only. It never writes another mod's configuration. From the source checkout:
-
-```powershell
-node tools/scan-shortcuts.js 'D:/path/to/MODS' 'Profile name' 'Magelight/NirnCommand/views/palette/scanned-commands.js'
-```
-
-Run the build again to include the result, or place the generated file in the installed Nirn Command mod. Detection identifies a configured key; it does not prove OAR accepts simulated input.
+**Clear history** and **Clear favorites** require a second activation within five seconds. **Toggle unavailable actions** changes whether actions with missing dependencies are shown.
 
 ## Logs and reporting
 
-Magelight logs are normally under `Documents/My Games/Skyrim Special Edition/SKSE/Magelight.log` and Papyrus logs under `Documents/My Games/Skyrim Special Edition/Logs/Script/Papyrus.0.log` when Papyrus logging is enabled. Include the relevant `[NirnCommand]` lines and use `BUG_REPORT_TEMPLATE.md`. Paths may differ when MO2 uses profile-specific documents.
+Include the relevant `[NirnCommand]` lines from Papyrus logs, `NirnCommandNative.log`, Magelight's log, the executable and SKSE versions, the active MO2 profile, and the steps to reproduce. Paths vary when MO2 uses profile-specific documents. `BUG_REPORT_TEMPLATE.md` lists the useful details.
 
 ## Build
 
-Install Node.js, the Creation Kit Papyrus compiler and the matching Skyrim, SKSE, Magelight, PapyrusUtil and SkyrimNet script sources. Copy `config.example.json` to ignored `config.local.json` and fill its paths. Run `./build.ps1`. It generates the ESP and SEQ, compiles the controller, checks JS syntax and the ESP with xEdit's command-line dumper, then creates `dist/NirnCommand-Personal-AllIn.zip`. It does not modify MO2 or other mods.
+The native Windows build uses CommonLibSSE-NG, vcpkg and CMake. GitHub Actions builds the DLL and runs the native tests; the artifact contains the DLL and dependency license files. Place the DLL at `build/native/NirnCommandNative.dll` and the artifact's `licenses` directory at `build/native/licenses`, or pass `-NativeDll` and `-NativeLicenses` to `build.ps1`.
+
+Install Node.js, the Creation Kit Papyrus compiler and matching Skyrim, SKSE, Magelight, PapyrusUtil and SkyrimNet script sources. Copy `config.example.json` to ignored `config.local.json` and fill its local paths. Run `./build.ps1`. It checks the JS tests and syntax, builds the ESP and PEX scripts, checks the ESP with xEdit, requires the native DLL and licenses, validates the MO2 ZIP, and writes a SHA-256 sidecar. No MO2 installation or other mod's configuration is changed by the build.
+
+The OAR UI interface header is from Open Animation Replacer by ersh, pinned at commit `f4e7688b065175aff70aa523073857911e15aca3`. Its accompanying COPYING file is included with the package. Other native dependency notices are collected from the vcpkg build.

@@ -63,6 +63,8 @@ namespace {
     void RefreshDiscovery(RE::StaticFunctionTag*)
     {
         auto entries = nirn::discover_mcm("Data");
+        auto oar = nirn::discover_oar("Data");
+        entries.insert(entries.end(), oar.begin(), oar.end());
         std::scoped_lock lock(discoveryMutex);
         discoveryEntries = std::move(entries);
     }

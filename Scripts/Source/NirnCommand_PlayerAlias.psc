@@ -124,18 +124,22 @@ Function Connect()
         int consoleAvailable = 0
         int skyrimNetAvailable = 0
         int oarAvailable = 0
+        int oarInstalled = 0
         if SKSE.GetPluginVersion("ConsoleUtilSSE") >= 0 || SKSE.GetPluginVersion("ConsoleUtil") >= 0
             consoleAvailable = 1
         endif
         if SKSE.GetPluginVersion("SkyrimNet") >= 0
             skyrimNetAvailable = 1
         endif
+        if SKSE.GetPluginVersion("OpenAnimationReplacer") >= 0
+            oarInstalled = 1
+        endif
         if SKSE.GetPluginVersion("NirnCommandNative") >= 0
             if NirnCommandNative.IsOarAvailable()
                 oarAvailable = 1
             endif
         endif
-        Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable)
+        Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable + "|" + oarInstalled)
         Magelight.BindHotkey(_viewId, 0, 0)
         Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
         Magelight.Call(_viewId, "ncBridgeReady", "")
