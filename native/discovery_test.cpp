@@ -21,7 +21,7 @@ int main()
           {"modName":"../outside","id":"open","keycode":20},
           {"modName":"Example","id":"unbound","keycode":0}]})");
         write(root / "MCM/Config/Example/keybinds.json", R"({"modName":"Example","keybinds":[
-          {"id":"open","desc":"Open menu","action":{"type":"CallFunction","form":"Example.esp|800","function":"Open"}},
+          {"id":"open","desc":"Open menu","action":{"type":"CallFunction","form":"Example.esp|800","scriptName":"ExampleQuest","function":"Open"}},
           {"id":"broken","desc":"No action","action":{"type":"CallFunction"}},
           {"id":"unbound","desc":"Not mapped","action":{"type":"RunConsoleCommand","command":"tgm"}}]})");
         write(root / "SKSE/Plugins/OpenAnimationReplacer.ini", "[UI]\nbEnableUI=true\nuToggleUIKey=45\nuToggleUIKeyShift=1\nuToggleUIKeyCtrl=0\nuToggleUIKeyAlt=1\n");
@@ -34,6 +34,7 @@ int main()
         auto entry=nlohmann::json::parse(entries[0]);
         require(entry["id"]=="mcm:Example:open", "wrong identity");
         require(entry["action"]=="shortcut2:37:0", "wrong key");
+        require(entry["targetForm"]=="Example.esp|800" && entry["targetScript"]=="ExampleQuest", "missing declared Papyrus target");
         require(entry["source"].get<std::string>().find("keybinds.json")!=std::string::npos,"missing source");
         write(root / "MCM/Settings/keybinds.json", "invalid");
         require(nirn::discover_mcm(root).empty(),"malformed settings must not create actions");

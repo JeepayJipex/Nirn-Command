@@ -2,6 +2,8 @@
 #include "OpenAnimationReplacerAPI-UI.h"
 #include "discovery.h"
 #include "storage.h"
+#include <nlohmann/json.hpp>
+#include <charconv>
 
 namespace {
     std::filesystem::path DataDirectory()
@@ -70,10 +72,39 @@ namespace {
     }
     std::mutex discoveryMutex;
     std::vector<std::string> discoveryEntries;
+    void MarkBoundPapyrus(std::string& serialized)
+    {
+        auto entry=nlohmann::json::parse(serialized,nullptr,false);
+        if (!entry.is_object() || !entry.contains("targetForm") || !entry["targetForm"].is_string() ||
+            !entry.contains("targetScript") || !entry["targetScript"].is_string()) return;
+        const auto formSpec=entry["targetForm"].get<std::string>();
+        const auto script=entry["targetScript"].get<std::string>();
+        const auto separator=formSpec.find('|');
+        if (separator==std::string::npos || !separator || script.empty()) return;
+        auto formId=formSpec.substr(separator+1);
+        if (formId.starts_with("0x") || formId.starts_with("0X")) formId.erase(0,2);
+        std::uint32_t localId=0;
+        const auto parsed=std::from_chars(formId.data(),formId.data()+formId.size(),localId,16);
+        if (parsed.ec!=std::errc{} || parsed.ptr!=formId.data()+formId.size()) return;
+        auto data=RE::TESDataHandler::GetSingleton();
+        auto vm=RE::BSScript::Internal::VirtualMachine::GetSingleton();
+        if (!data || !vm) return;
+        auto form=data->LookupForm(localId,formSpec.substr(0,separator));
+        auto policy=vm->GetObjectHandlePolicy();
+        if (!form || !policy) return;
+        auto handle=policy->GetHandleForObject(form->GetFormType(),form);
+        RE::BSTSmartPointer<RE::BSScript::Object> object;
+        if (vm->FindBoundObject(handle,script.c_str(),object) && object) {
+            entry["detail"]="MCM Helper · Papyrus target loaded · simulated key";
+            entry["confidence"]="Papyrus target loaded; key reception unverified";
+            serialized=entry.dump(-1,' ',false,nlohmann::json::error_handler_t::replace);
+        }
+    }
     void RefreshDiscovery(RE::StaticFunctionTag*)
     {
         if (dataDirectory.empty()) return;
         auto entries = nirn::discover_mcm(dataDirectory);
+        for (auto& entry : entries) MarkBoundPapyrus(entry);
         auto oar = nirn::discover_oar(dataDirectory);
         entries.insert(entries.end(), oar.begin(), oar.end());
         std::scoped_lock lock(discoveryMutex);

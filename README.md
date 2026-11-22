@@ -18,7 +18,7 @@ Enter equips or uses a listed item, or equips a spell in the right hand. The act
 
 SkyrimNet commands use its native hotkey APIs. Open Animation Replacer uses its UI V3 API when available. If that API is unavailable, a separate experimental simulated shortcut is offered only when OAR is loaded and its effective virtual INI explicitly identifies the key and modifiers. OAR 3.2.1 or later is needed for UI V3.
 
-The background discovery reads MCM Helper's virtual `MCM/Settings/keybinds.json` together with matching `MCM/Config/<mod>/keybinds.json` definitions. It displays the configured action and source, and labels simulated execution as unverified. It never creates an action from a key alone. This is best-effort discovery: not all Papyrus registrations, SKSE plugins, custom formats, profile changes or keys held only in a save can be discovered. A file visible in MO2's virtual Data tree does not establish that a mod has loaded or reread it.
+The background discovery reads MCM Helper's virtual `MCM/Settings/keybinds.json` together with matching `MCM/Config/<mod>/keybinds.json` definitions. It displays the configured action and source, labels simulated execution as unverified, and identifies a declared Papyrus target when its form and script are bound in the running VM. It never creates an action from a key alone. This is best-effort discovery: not all Papyrus registrations, SKSE plugins, custom formats, profile changes or keys held only in a save can be discovered. A file visible in MO2's virtual Data tree does not establish that a mod has loaded or reread it.
 
 ## Customize in game
 

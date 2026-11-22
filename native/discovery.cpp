@@ -105,6 +105,9 @@ std::vector<std::string> discover_mcm(const std::filesystem::path& data)
             json entry = {{"id", "mcm:" + mod + ":" + id}, {"label", mod + " — " + label}, {"kind", "Mod"},
                 {"action", "shortcut2:" + std::to_string(key) + ":0"}, {"detail", "MCM Helper mapping · simulated key · activation unverified"},
                 {"source", "MCM/Settings/keybinds.json + MCM/Config/" + mod + "/keybinds.json"}, {"confidence", "configured association"}};
+            if (!field(action,"form").empty()) entry["targetForm"]=field(action,"form");
+            if (!field(action,"scriptName").empty()) entry["targetScript"]=field(action,"scriptName");
+            if (!field(action,"function").empty()) entry["targetFunction"]=field(action,"function");
             auto serialized = entry.dump(-1, ' ', false, json::error_handler_t::replace);
             if (serialized.size() > 1800) continue;
             out.push_back(std::move(serialized));
