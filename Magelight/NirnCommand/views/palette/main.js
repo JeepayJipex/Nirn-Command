@@ -34,20 +34,55 @@
   let fallbackReady=false, fallbackReading=false, fallbackDirty=false, fallbackWriting=false, fallbackSlot=0, fallbackParts=[], fallbackCount=0, fallbackRequest=0, fallbackPending=null;
   const fallbackTouched=new Set();
   let openingHotkey={key:210,mask:0};
-  function ensureCommands() {
-    if (Array.isArray(settings.commands)) return;
+  let commands=[], commandsReady=false, commandsReadStarted=false, commandsMissing=false, commandsCount=-2, commandsParts=[];
+  let commandsDirty=false, commandsWriting=false, commandsSerial=0, commandsPending=null;
+  function validCommands(value) {
+    if(!Array.isArray(value)) return [];
     const used=new Set(statics.map(entry=>entry.id));
-    settings.commands=(window.NIRN_USER_COMMANDS || []).filter(entry=>entry && typeof entry.id==='string' && entry.id.startsWith('user:') && typeof entry.label==='string' && typeof entry.action==='string' && /^(console:|skyrimnet:|shortcut:)/.test(entry.action) && !used.has(entry.id) && used.add(entry.id));
-    if(settings.commands.length) save('settings',settings);
+    return value.filter(entry=>entry && typeof entry.id==='string' && entry.id.startsWith('user:') && typeof entry.label==='string' && entry.label.trim() && typeof entry.action==='string' && /^(console:|skyrimnet:|shortcut:|shortcut2:|oar:)/.test(entry.action) && !used.has(entry.id) && used.add(entry.id));
+  }
+  function finishCommandsLoad() {
+    if (!commandsMissing || (!storageAvailable && !fallbackReady)) return;
+    const source=Array.isArray(settings.commands) ? settings.commands : (window.NIRN_USER_COMMANDS || []);
+    commands=validCommands(source); commandsReady=true; commandsMissing=false; commandsDirty=true;
+    render(); flushCommands();
+  }
+  function flushCommands() {
+    if (!bridge || !commandsReady || commandsWriting || !commandsDirty) return;
+    const chars=Array.from(JSON.stringify({version:1,commands}));
+    let bytes=0; for(const char of chars) { const code=char.codePointAt(0); bytes += code<128?1:code<2048?2:code<65536?3:4; }
+    if(bytes>256*1024) {statusEl.textContent=`Commands exceed 262144 UTF-8 bytes (${bytes})`; editor?.commandsResult(false); return;}
+    const parts=[]; for(let i=0;i<chars.length;i+=100) parts.push(chars.slice(i,i+100).join(''));
+    commandsDirty=false; commandsWriting=true; let index=-1;
+    function next() {
+      const request=String(++commandsSerial);
+      const operation=index<0?'begin':index<parts.length?'write':'commit';
+      commandsPending={request,advance:()=>{ if(operation==='commit') {commandsWriting=false; editor?.commandsResult(true); statusEl.textContent='Commands saved'; flushCommands();} else {index++;next();} }};
+      bridge.send('commands',operation==='write'?`write|${request}|${parts[index]}`:`${operation}|${request}`);
+      setTimeout(()=>{if(commandsPending?.request===request) {commandsPending=null;commandsWriting=false;commandsDirty=true;statusEl.textContent='Commands save timed out';editor?.commandsResult(false);}},10000);
+    }
+    next();
   }
   const editor=window.NirnEditor?.create({
-    getCommands:()=>settings.commands || [],
-    setCommands:commands=>{settings.commands=commands;save('settings',settings);render();},
+    getCommands:()=>commands,
+    setCommands:value=>{commands=validCommands(value);commandsDirty=true;render();flushCommands();},
     getHotkey:()=>openingHotkey,
     setHotkey:(key,mask)=>{if(bridge) bridge.send('hotkey',`${key}|${mask}`);},
     onClose:()=>{if(bridge) bridge.send('__escapecapture','0');input.focus();render();}
   });
-  if(storageAvailable) ensureCommands();
+  window.ncCommandsBegin = function(payload) {const count=Number(payload); commandsCount=Number.isInteger(count)&&count>=-3&&count<=1024?count:-2; commandsParts=commandsCount>=0 ? new Array(commandsCount) : [];};
+  window.ncCommandsChunk = function(payload) {const text=String(payload),split=text.indexOf('|'),i=Number(text.slice(0,split)); if(split>=0&&Number.isInteger(i)&&i>=0&&i<commandsCount) commandsParts[i]=text.slice(split+1);};
+  window.ncCommandsDone = function() {
+    if(commandsCount===-1) {commandsMissing=true;finishCommandsLoad();return;}
+    if(commandsCount<0 || Array.from({length:commandsCount},(_,i)=>typeof commandsParts[i]==='string').includes(false)) {statusEl.textContent='Commands file unavailable or invalid';return;}
+    try {const saved=JSON.parse(commandsParts.join(''));if(saved.version!==1||!Array.isArray(saved.commands)) throw Error('Invalid');commands=validCommands(saved.commands);commandsReady=true;render();}
+    catch (_) {statusEl.textContent='Commands file could not be read';}
+  };
+  window.ncCommandsAck = function(payload) {
+    const [request,result]=String(payload).split('|'); if(!commandsPending || commandsPending.request!==request) return;
+    const pending=commandsPending; commandsPending=null;
+    if(result==='ok') pending.advance(); else {commandsWriting=false;commandsDirty=true;statusEl.textContent='Commands could not be saved';editor?.commandsResult(false);}
+  };
   function flushFallback() {
     if (storageAvailable || !bridge || !fallbackReady || fallbackWriting || !fallbackDirty) return;
     fallbackDirty=false; fallbackWriting=true;
@@ -73,7 +108,7 @@
       if (!fallbackTouched.has('favorites') && Array.isArray(saved.favorites)) favorites=saved.favorites;
       if (!fallbackTouched.has('usage') && saved.usage && typeof saved.usage==='object' && !Array.isArray(saved.usage)) usage=saved.usage;
       if (!fallbackTouched.has('settings') && saved.settings && typeof saved.settings==='object' && !Array.isArray(saved.settings)) settings=saved.settings;
-      fallbackReady=true; fallbackTouched.clear(); ensureCommands(); render(); flushFallback();
+      fallbackReady=true; fallbackTouched.clear(); finishCommandsLoad(); render(); flushFallback();
     } catch (_) { statusEl.textContent='Preferences could not be read'; }
   };
   window.ncPersistAck = function(payload) {
@@ -106,10 +141,10 @@
       const pos = q.indexOf('>'), raw = q.slice(pos + 1);
       return raw.trim() ? [{ id:'direct:' + raw, label:'Run: ' + raw, detail:'Console command', kind:'Console', action:'console:' + raw, transient:true }] : [];
     }
-    const entries = statics.concat(settings.commands || [], modDiscovered, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
+    const entries = statics.concat(commands, modDiscovered, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
     if (!query) {
       const byId = new Map(entries.map(e => [e.id, e]));
-      const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...(settings.commands || []).map(e => e.id)];
+      const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...commands.map(e => e.id)];
       return [...new Set(ordered)].map(id => byId.get(id)).filter(Boolean).slice(0, 20);
     }
     return entries.map(entry => ({ entry, score:score(entry, query) }))
@@ -150,7 +185,7 @@
       } else { clearKind=kind; clearRequestedAt=Date.now(); statusEl.textContent='Activate again within five seconds to clear ' + kind; }
       return;
     }
-    if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey') { if (!storageAvailable && !fallbackReady) {statusEl.textContent='Preferences still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : 'command');} return; }
+    if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey') { if (entry.action === 'local:commands' && !commandsReady) {statusEl.textContent='Commands unavailable or still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : 'command');} return; }
     if (entry?.action === 'local:toggle-unavailable') { settings.showUnavailable=settings.showUnavailable===false; save('settings',settings); statusEl.textContent=settings.showUnavailable ? 'Unavailable actions shown' : 'Unavailable actions hidden'; render(); return; }
     if (entry?.action === 'local:refresh') { if (bridge) { bridge.send('catalog','refresh'); statusEl.textContent='Loading…'; } return; }
     if (!entry || !bridge) { statusEl.textContent='Bridge unavailable'; return; }
@@ -180,6 +215,7 @@
   window.ncGameLoaded = function() { modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
+    if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
   };
   window.ncCatalogBegin = function(value) { epoch=String(value); incoming=[]; };
   window.ncCatalogComplete = function(value) { if (String(value)!==epoch) return; discovered=incoming; incoming=[]; statusEl.textContent='Catalog ready'; render(); };

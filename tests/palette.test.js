@@ -43,7 +43,7 @@ const bridge2={send:(...args)=>sent2.push(args),on:(name,fn)=>{handlers2[name]=f
 const window2={magelight:bridge2,NIRN_COMMANDS:[{id:'user:é😀',label:'Special',kind:'Console',action:'console:tgm'}],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 const badStorage={getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');},removeItem(){throw Error('unavailable');}};
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window2,document:document2,localStorage:badStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
-window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['persist','read']);
+window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['persist','read']); assert.deepEqual(sent2.shift(),['commands','read']);
 const previous=JSON.stringify({favorites:['user:é😀'],usage:{},settings:{showUnavailable:true}});
 window2.ncPersistBegin('0|1'); window2.ncPersistChunk('0|'+previous); window2.ncPersistDone();
 assert.equal(results2.children[0].children[2].textContent,'★');
@@ -64,3 +64,20 @@ const failed=sent2.shift(); assert.equal(failed[0],'persist');
 const failedId=failed[1].split('|')[1]; window2.ncPersistAck(failedId+'|failure');
 assert.equal(status2.textContent,'Preferences could not be saved'); assert.equal(sent2.length,0);
 console.log('Preference save failures do not report a successful commit.');
+// New native store migrates legacy commands once using acknowledged UTF-8-safe chunks.
+const sent3=[], handlers3={}, input3=new Element('input'), results3=new Element();
+const document3={querySelector:s=>({'#query':input3,'#results':results3,'#meta':new Element(),'#status':new Element()})[s],createElement:t=>new Element(t),createDocumentFragment:()=>new Element('fragment'),addEventListener:(name,fn)=>{handlers3[name]=fn;}};
+const window3={magelight:{send:(...args)=>sent3.push(args),on:(name,fn)=>{handlers3[name]=fn;}},NIRN_COMMANDS:[],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[{id:'user:legacy',label:'Épée 😀',action:'console:help "été|é"'}]};
+const store3=new Map(), storage3={getItem:key=>store3.get(key)||null,setItem:(key,value)=>store3.set(key,value),removeItem:key=>store3.delete(key)};
+vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window3,document:document3,localStorage:storage3,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
+window3.ncBridgeReady(); assert.deepEqual(sent3.shift(),['commands','read']);
+window3.ncCommandsBegin('-1');window3.ncCommandsDone();
+let serialized='';let operations=[];
+while(sent3.length) {
+  const [channel,payload]=sent3.shift();assert.equal(channel,'commands');const first=payload.indexOf('|'),second=payload.indexOf('|',first+1);
+  const op=payload.slice(0,first),request=second<0?payload.slice(first+1):payload.slice(first+1,second);operations.push(op);
+  if(op==='write') {const part=payload.slice(second+1);assert.ok(Buffer.byteLength(part,'utf8')<=400);serialized+=part;}
+  window3.ncCommandsAck(request+'|ok');
+}
+assert.equal(operations[0],'begin');assert.equal(operations.at(-1),'commit');assert.equal(JSON.parse(serialized).commands[0].label,'Épée 😀');assert.equal(JSON.parse(serialized).commands[0].action,'console:help "été|é"');
+console.log('Native command migration and Unicode transaction protocol checks passed.');

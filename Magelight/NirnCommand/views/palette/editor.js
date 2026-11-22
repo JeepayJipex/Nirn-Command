@@ -58,7 +58,7 @@ window.NirnEditor = (() => {
       get('commands').addEventListener('change',choose); get('type').addEventListener('change',actionVisibility);
       get('capture').addEventListener('click',()=>{ capture=true; held=0; message('Press modifiers, then a key. Escape cancels capture.'); });
       get('cancel').addEventListener('click',hide);
-      get('delete').addEventListener('click',()=>{ if(!current) return; options.setCommands(options.getCommands().filter(x=>x.id!==current.id)); current=null; rebuild(); choose(); message('Command deleted'); });
+      get('delete').addEventListener('click',()=>{ if(!current) return; options.setCommands(options.getCommands().filter(x=>x.id!==current.id)); current=null; rebuild(); choose(); message('Saving changes…'); });
       get('save').addEventListener('click',()=>{
         if(capture) {message('Finish or cancel key capture first.'); return;}
         if(mode==='hotkey') {
@@ -74,7 +74,7 @@ window.NirnEditor = (() => {
         if(!action) {message('Choose an action.'); return;}
         const id=current?.id || `user:${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
         const entry={id,label,action,kind:type==='console'?'Console':type==='shortcut'?'Shortcut':'Mod',detail:type==='shortcut'?describe(shortcut.key,shortcut.mask):'Custom command'};
-        options.setCommands([...options.getCommands().filter(x=>x.id!==id),entry]); current=entry; rebuild(); message('Command saved');
+        options.setCommands([...options.getCommands().filter(x=>x.id!==id),entry]); current=entry; rebuild(); message('Saving changes…');
       });
     }
     function open(which) {
@@ -99,7 +99,7 @@ window.NirnEditor = (() => {
       shortcut={key,mask:held}; capture=false; held=0; updateShortcut(); message('Press Save to apply.'); return true;
     }
     function keyup(event) { if(capture && modifiers[event.code]) {held &= ~modifiers[event.code]; event.preventDefault(); event.stopPropagation(); return true;} return false; }
-    return {open,keydown,keyup,hide,isOpen:()=>!!panel&&!panel.hidden,hotkeyResult:ok=>{if(panel&&!panel.hidden&&mode==='hotkey') {message(ok?'Shortcut saved':'Could not save shortcut'); if(ok) hide();}}};
+    return {open,keydown,keyup,hide,commandsResult:ok=>{if(panel&&!panel.hidden&&mode==='command') message(ok?'Commands saved':'Commands could not be saved');},isOpen:()=>!!panel&&!panel.hidden,hotkeyResult:ok=>{if(panel&&!panel.hidden&&mode==='hotkey') {message(ok?'Shortcut saved':'Could not save shortcut'); if(ok) hide();}}};
   }
   return {create,describe,codes};
 })();

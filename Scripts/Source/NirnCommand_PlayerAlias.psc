@@ -35,9 +35,14 @@ Function Setup()
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
     RegisterForModEvent("Magelight_JS_hotkey", "OnHotkey")
+    RegisterForModEvent("Magelight_JS_commands", "OnCommands")
     UnregisterForAllKeys()
-    _hotkey = JsonUtil.GetIntValue("NirnCommand/hotkey", "key", 210)
-    _hotkeyModifiers = JsonUtil.GetIntValue("NirnCommand/hotkey", "modifiers", 0)
+    _hotkey = 210
+    _hotkeyModifiers = 0
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        _hotkey = NirnCommandNative.GetHotkey(0)
+        _hotkeyModifiers = NirnCommandNative.GetHotkey(1)
+    endif
     if !ValidHotkey(_hotkey, _hotkeyModifiers)
         _hotkey = 210
         _hotkeyModifiers = 0
@@ -109,7 +114,8 @@ Function Connect()
         bool executeReady = Magelight.RegisterListener(_viewId, "execute")
         bool persistReady = Magelight.RegisterListener(_viewId, "persist")
         bool hotkeyReady = Magelight.RegisterListener(_viewId, "hotkey")
-        if !catalogReady || !executeReady || !persistReady || !hotkeyReady
+        bool commandsReady = Magelight.RegisterListener(_viewId, "commands")
+        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady
             Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
             _viewId = 0
             return
@@ -186,7 +192,7 @@ Event OnKeyDown(int keyCode)
             Magelight.ReleaseUIMode("NirnCommand")
             Magelight.ShowView(_viewId, false)
         endif
-    else
+    elseif !Utility.IsInMenuMode()
         Magelight.RequestUIMode(_viewId, true)
     endif
 EndEvent
@@ -218,12 +224,7 @@ Event OnHotkey(string eventName, string payload, float numArg, Form sender)
         Magelight.Call(_viewId, "ncHotkeyResult", "failure")
         return
     endif
-    string file = "NirnCommand/hotkey"
-    JsonUtil.SetIntValue(file, "key", keyCode)
-    JsonUtil.SetIntValue(file, "modifiers", modifiers)
-    if !JsonUtil.Save(file)
-        JsonUtil.SetIntValue(file, "key", _hotkey)
-        JsonUtil.SetIntValue(file, "modifiers", _hotkeyModifiers)
+    if SKSE.GetPluginVersion("NirnCommandNative") < 0 || !NirnCommandNative.SetHotkey(keyCode, modifiers)
         Magelight.Call(_viewId, "ncHotkeyResult", "failure")
         return
     endif
@@ -243,6 +244,55 @@ Function ReportAction(string request, string result)
         Debug.Notification("Nirn Command: action " + result)
     endif
 EndFunction
+
+Event OnCommands(string eventName, string payload, float numArg, Form sender)
+    if (numArg as int) != _viewId || _viewId == 0
+        return
+    endif
+    if payload == "read"
+        int count = -3
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+            count = NirnCommandNative.LoadCommands()
+        endif
+        Magelight.Call(_viewId, "ncCommandsBegin", count as string)
+        int i = 0
+        while i < count
+            Magelight.Call(_viewId, "ncCommandsChunk", i + "|" + NirnCommandNative.CommandsChunk(i))
+            i += 1
+            if i % 20 == 0
+                Utility.WaitMenuMode(0.01)
+            endif
+        endwhile
+        Magelight.Call(_viewId, "ncCommandsDone", "")
+        return
+    endif
+    int first = StringUtil.Find(payload, "|")
+    int second = StringUtil.Find(payload, "|", first + 1)
+    if first < 1
+        return
+    endif
+    string operation = StringUtil.Substring(payload, 0, first)
+    string request = StringUtil.Substring(payload, first + 1)
+    if second > first
+        request = StringUtil.Substring(payload, first + 1, second - first - 1)
+    endif
+    bool success = false
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        if operation == "begin"
+            NirnCommandNative.BeginCommandsWrite()
+            success = true
+        elseif operation == "write" && second > first
+            success = NirnCommandNative.AppendCommandsChunk(StringUtil.Substring(payload, second + 1))
+        elseif operation == "commit"
+            success = NirnCommandNative.CommitCommandsWrite()
+        endif
+    endif
+    if success
+        Magelight.Call(_viewId, "ncCommandsAck", request + "|ok")
+    else
+        Magelight.Call(_viewId, "ncCommandsAck", request + "|failure")
+    endif
+EndEvent
 
 Event OnPersist(string eventName, string payload, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0
