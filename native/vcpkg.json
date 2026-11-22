@@ -1,0 +1,5 @@
+{
+  "name": "nirn-command-native",
+  "version-string": "0.3.0",
+  "dependencies": ["commonlibsse-ng"]
+}
