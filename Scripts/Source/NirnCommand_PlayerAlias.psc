@@ -3,6 +3,18 @@ Scriptname NirnCommand_PlayerAlias extends ReferenceAlias
 int _viewId
 int _epoch
 bool _scanning
+bool _sending
+bool _dirty
+int _slot
+int _activeEpoch
+int _previousEpoch
+int _previousSlot
+float _lastChange
+float _lastScan
+float _lastDiscovery
+int _hotkey
+int _hotkeyModifiers
+bool _keyHeld
 
 Event OnInit()
     Setup()
@@ -11,6 +23,9 @@ EndEvent
 Event OnPlayerLoadGame()
     _epoch += 1
     _scanning = false
+    _sending = false
+    _activeEpoch = 0
+    _previousEpoch = 0
     Setup()
 EndEvent
 
@@ -19,17 +34,58 @@ Function Setup()
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
     RegisterForModEvent("Magelight_JS_execute", "OnExecute")
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
+    RegisterForModEvent("Magelight_JS_hotkey", "OnHotkey")
+    UnregisterForAllKeys()
+    _hotkey = JsonUtil.GetIntValue("NirnCommand/hotkey", "key", 210)
+    _hotkeyModifiers = JsonUtil.GetIntValue("NirnCommand/hotkey", "modifiers", 0)
+    if !ValidHotkey(_hotkey, _hotkeyModifiers)
+        _hotkey = 210
+        _hotkeyModifiers = 0
+    endif
+    _keyHeld = false
+    RegisterForKey(_hotkey)
     RegisterForModEvent("Magelight_ViewDomReady", "OnDomReady")
-    RegisterForSingleUpdate(2.0)
+    RegisterForModEvent("Magelight_UIModeExited", "OnUIModeExited")
+    _dirty = true
+    _lastChange = 0.0
+    _lastDiscovery = Utility.GetCurrentRealTime() - 30.0
+    RegisterForSingleUpdate(1.0)
     Connect()
 EndFunction
 
 Event OnUpdate()
     if _viewId == 0
         Connect()
-        if _viewId == 0
-            RegisterForSingleUpdate(2.0)
+    endif
+    float now = Utility.GetCurrentRealTime()
+    if !_scanning && !_sending && !Magelight.IsUIModeActive()
+        if (_dirty && now - _lastChange >= 0.5) || now - _lastScan >= 30.0
+            ScanCatalog()
         endif
+        if now - _lastDiscovery >= 30.0
+            _lastDiscovery = now
+            if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+                NirnCommandNative.RefreshDiscovery()
+                SendDiscovery()
+            endif
+        endif
+    endif
+    RegisterForSingleUpdate(1.0)
+EndEvent
+
+Event OnItemAdded(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akSourceContainer)
+    _dirty = true
+    _lastChange = Utility.GetCurrentRealTime()
+EndEvent
+
+Event OnItemRemoved(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akDestContainer)
+    _dirty = true
+    _lastChange = Utility.GetCurrentRealTime()
+EndEvent
+
+Event OnUIModeExited(string eventName, string strArg, float numArg, Form sender)
+    if (numArg as int) == _viewId
+        _keyHeld = false
     endif
 EndEvent
 
@@ -52,19 +108,133 @@ Function Connect()
         bool catalogReady = Magelight.RegisterListener(_viewId, "catalog")
         bool executeReady = Magelight.RegisterListener(_viewId, "execute")
         bool persistReady = Magelight.RegisterListener(_viewId, "persist")
-        if !catalogReady || !executeReady || !persistReady
+        bool hotkeyReady = Magelight.RegisterListener(_viewId, "hotkey")
+        if !catalogReady || !executeReady || !persistReady || !hotkeyReady
             Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
             _viewId = 0
-            RegisterForSingleUpdate(2.0)
             return
         endif
         Magelight.Call(_viewId, "ncGameLoaded", "")
+        int consoleAvailable = 0
+        int skyrimNetAvailable = 0
+        int oarAvailable = 0
+        if SKSE.GetPluginVersion("ConsoleUtilSSE") >= 0 || SKSE.GetPluginVersion("ConsoleUtil") >= 0
+            consoleAvailable = 1
+        endif
+        if SKSE.GetPluginVersion("SkyrimNet") >= 0
+            skyrimNetAvailable = 1
+        endif
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+            if NirnCommandNative.IsOarAvailable()
+                oarAvailable = 1
+            endif
+        endif
+        Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable)
+        Magelight.BindHotkey(_viewId, 0, 0)
+        Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
         Magelight.Call(_viewId, "ncBridgeReady", "")
+        SendCatalog()
+        SendDiscovery()
         Debug.Trace("[NirnCommand] Bridge ready, view " + _viewId)
-    else
-        RegisterForSingleUpdate(2.0)
     endif
 EndFunction
+
+bool Function ValidShortcut(int keyCode, int modifiers)
+    if keyCode <= 0 || keyCode >= 256 || modifiers < 0 || modifiers > 63
+        return false
+    endif
+    return keyCode != 42 && keyCode != 54 && keyCode != 29 && keyCode != 157 && keyCode != 56 && keyCode != 184
+EndFunction
+
+bool Function ValidHotkey(int keyCode, int modifiers)
+    return ValidShortcut(keyCode, modifiers) && keyCode != 1 && keyCode != 201
+EndFunction
+
+int Function PressedModifiers()
+    int result = 0
+    if Input.IsKeyPressed(42)
+        result += 1
+    endif
+    if Input.IsKeyPressed(54)
+        result += 2
+    endif
+    if Input.IsKeyPressed(29)
+        result += 4
+    endif
+    if Input.IsKeyPressed(157)
+        result += 8
+    endif
+    if Input.IsKeyPressed(56)
+        result += 16
+    endif
+    if Input.IsKeyPressed(184)
+        result += 32
+    endif
+    return result
+EndFunction
+
+Event OnKeyDown(int keyCode)
+    if keyCode != _hotkey || _keyHeld
+        return
+    endif
+    _keyHeld = true
+    if PressedModifiers() != _hotkeyModifiers || _viewId == 0
+        return
+    endif
+    if Magelight.IsUIModeActive()
+        if Magelight.GetUIModeView() == _viewId
+            Magelight.ReleaseUIMode("NirnCommand")
+            Magelight.ShowView(_viewId, false)
+        endif
+    else
+        Magelight.RequestUIMode(_viewId, true)
+    endif
+EndEvent
+
+Event OnKeyUp(int keyCode, float holdTime)
+    if keyCode == _hotkey
+        _keyHeld = false
+    endif
+EndEvent
+
+Event OnHotkey(string eventName, string payload, float numArg, Form sender)
+    if (numArg as int) != _viewId || _viewId == 0
+        return
+    endif
+    if payload == "close"
+        if Magelight.GetUIModeView() == _viewId
+            Magelight.ReleaseUIMode("NirnCommand")
+            Magelight.ShowView(_viewId, false)
+        endif
+        return
+    endif
+    int separator = StringUtil.Find(payload, "|")
+    if separator < 1
+        return
+    endif
+    int keyCode = StringUtil.Substring(payload, 0, separator) as int
+    int modifiers = StringUtil.Substring(payload, separator + 1) as int
+    if !ValidHotkey(keyCode, modifiers)
+        Magelight.Call(_viewId, "ncHotkeyResult", "failure")
+        return
+    endif
+    string file = "NirnCommand/hotkey"
+    JsonUtil.SetIntValue(file, "key", keyCode)
+    JsonUtil.SetIntValue(file, "modifiers", modifiers)
+    if !JsonUtil.Save(file)
+        JsonUtil.SetIntValue(file, "key", _hotkey)
+        JsonUtil.SetIntValue(file, "modifiers", _hotkeyModifiers)
+        Magelight.Call(_viewId, "ncHotkeyResult", "failure")
+        return
+    endif
+    UnregisterForKey(_hotkey)
+    _hotkey = keyCode
+    _hotkeyModifiers = modifiers
+    _keyHeld = false
+    RegisterForKey(_hotkey)
+    Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
+    Magelight.Call(_viewId, "ncHotkeyResult", "ok")
+EndEvent
 
 Function ReportAction(string request, string result)
     Magelight.Call(_viewId, "ncActionResult", request + "|" + result)
@@ -131,77 +301,139 @@ Event OnPersist(string eventName, string payload, float numArg, Form sender)
     endif
 EndEvent
 
+Function SendDiscovery()
+    if _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
+        return
+    endif
+    int sendView = _viewId
+    int generation = _epoch
+    Magelight.Call(sendView, "ncDiscoveryBegin", "")
+    int count = NirnCommandNative.DiscoveryCount()
+    int i = 0
+    while i < count && sendView == _viewId && generation == _epoch
+        Magelight.Call(sendView, "ncDiscoveryEntry", NirnCommandNative.DiscoveryEntry(i))
+        i += 1
+        if i % 20 == 0
+            Utility.WaitMenuMode(0.01)
+        endif
+    endwhile
+    if sendView == _viewId && generation == _epoch
+        Magelight.Call(sendView, "ncDiscoveryComplete", "")
+    endif
+EndFunction
+
 Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
-    if (numArg as int) != _viewId || _viewId == 0 || _scanning
+    if (numArg as int) != _viewId || _viewId == 0
+        return
+    endif
+    if strArg == "refresh"
+        _dirty = true
+        _lastChange = 0.0
+    endif
+    SendCatalog()
+EndEvent
+
+Function SendCatalog()
+    if _activeEpoch == 0 || _sending || _viewId == 0
+        return
+    endif
+    PublishCatalog(_slot, _activeEpoch, false)
+EndFunction
+
+Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
+    if _sending
+        return
+    endif
+    _sending = true
+    int scanEpoch = _epoch
+    int sendView = _viewId
+    string list = "NirnCommand.Forms" + sendSlot
+    Actor player = Game.GetPlayer()
+    if sendView > 0
+        Magelight.Call(sendView, "ncCatalogBegin", sendEpoch as string)
+    endif
+    int i = 0
+    int total = StorageUtil.FormListCount(player, list)
+    while sendView > 0 && i < total && scanEpoch == _epoch && sendView == _viewId
+        Form item = StorageUtil.FormListGet(player, list, i)
+        if item
+            string kind = "item"
+            if item as Spell
+                kind = "spell"
+            endif
+            Magelight.Call(sendView, "ncAddEntry", kind + "|" + sendEpoch + ":" + i + "|" + PersistentKey(item, kind) + "|" + item.GetName())
+        endif
+        i += 1
+        if i % 40 == 0
+            Utility.WaitMenuMode(0.01)
+        endif
+    endwhile
+    if scanEpoch == _epoch && sendView == _viewId
+        if commit
+            _previousEpoch = _activeEpoch
+            _previousSlot = _slot
+            _slot = sendSlot
+            _activeEpoch = sendEpoch
+            _lastScan = Utility.GetCurrentRealTime()
+        endif
+        if sendView > 0
+            Magelight.Call(sendView, "ncCatalogComplete", sendEpoch as string)
+        endif
+    elseif commit && scanEpoch == _epoch
+        _dirty = true
+    endif
+    _sending = false
+EndFunction
+
+Function ScanCatalog()
+    if _scanning || _sending
         return
     endif
     _scanning = true
-    int consoleAvailable = 0
-    int skyrimNetAvailable = 0
-    int oarAvailable = 0
-    if SKSE.GetPluginVersion("ConsoleUtilSSE") >= 0 || SKSE.GetPluginVersion("ConsoleUtil") >= 0
-        consoleAvailable = 1
-    endif
-    if SKSE.GetPluginVersion("SkyrimNet") >= 0
-        skyrimNetAvailable = 1
-    endif
-    if SKSE.GetPluginVersion("OpenAnimationReplacer") >= 0
-        oarAvailable = 1
-    endif
-    Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable)
+    _dirty = false
     _epoch += 1
     int scanEpoch = _epoch
+    int nextSlot = 1 - _slot
+    string list = "NirnCommand.Forms" + nextSlot
     Actor player = Game.GetPlayer()
-    StorageUtil.FormListClear(player, "NirnCommand.Forms")
-    Magelight.Call(_viewId, "ncCatalogBegin", _epoch as string)
+    if _previousSlot == nextSlot
+        _previousEpoch = 0
+    endif
+    StorageUtil.FormListClear(player, list)
     int i = 0
     int total = player.GetNumItems()
     while i < total && scanEpoch == _epoch
         Form item = player.GetNthForm(i)
-        if item && ((item as Weapon) || (item as Armor) || (item as Potion)) && player.GetItemCount(item) > 0
-            string name = item.GetName()
-            if name != ""
-                int token = StorageUtil.FormListAdd(player, "NirnCommand.Forms", item)
-                Magelight.Call(_viewId, "ncAddEntry", "item|" + _epoch + ":" + token + "|" + PersistentKey(item, "item") + "|" + name)
-            endif
+        if item && ((item as Weapon) || (item as Armor) || (item as Potion)) && player.GetItemCount(item) > 0 && item.GetName() != ""
+            StorageUtil.FormListAdd(player, list, item)
         endif
         i += 1
         if i % 40 == 0
             Utility.WaitMenuMode(0.01)
-            if scanEpoch != _epoch
-                return
-            endif
         endif
     endwhile
-    if scanEpoch != _epoch
-        return
-    endif
     i = 0
     total = player.GetSpellCount()
     while i < total && scanEpoch == _epoch
         Spell knownSpell = player.GetNthSpell(i)
-        if knownSpell && knownSpell.GetEquipType() && player.HasSpell(knownSpell)
-            string spellName = knownSpell.GetName()
-            if spellName != ""
-                int spellToken = StorageUtil.FormListAdd(player, "NirnCommand.Forms", knownSpell)
-                Magelight.Call(_viewId, "ncAddEntry", "spell|" + _epoch + ":" + spellToken + "|" + PersistentKey(knownSpell, "spell") + "|" + spellName)
-            endif
+        if knownSpell && knownSpell.GetEquipType() && player.HasSpell(knownSpell) && knownSpell.GetName() != ""
+            StorageUtil.FormListAdd(player, list, knownSpell)
         endif
         i += 1
         if i % 40 == 0
             Utility.WaitMenuMode(0.01)
-            if scanEpoch != _epoch
-                return
-            endif
         endif
     endwhile
-    if scanEpoch != _epoch
-        return
+    if scanEpoch == _epoch
+        if !_sending && !Magelight.IsUIModeActive()
+            PublishCatalog(nextSlot, scanEpoch, true)
+            _scanning = false
+        else
+            _dirty = true
+            _scanning = false
+        endif
     endif
-    Magelight.Call(_viewId, "ncCatalogComplete", _epoch as string)
-    Debug.Trace("[NirnCommand] Catalog " + _epoch + " contains " + StorageUtil.FormListCount(player, "NirnCommand.Forms") + " forms")
-    _scanning = false
-EndEvent
+EndFunction
 
 string Function PersistentKey(Form target, string kind)
     int id = target.GetFormID()
@@ -264,6 +496,62 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
             ReportAction(request, "failure")
         endif
         return
+    elseif payload == "oar:menu"
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0 && NirnCommandNative.ToggleOar()
+            ReportAction(request, "sent")
+        else
+            ReportAction(request, "unavailable")
+        endif
+        return
+    elseif StringUtil.Find(payload, "shortcut2:") == 0
+        int delim2 = StringUtil.Find(payload, ":", 10)
+        if delim2 > 10
+            int key2 = StringUtil.Substring(payload, 10, delim2 - 10) as int
+            int mods2 = StringUtil.Substring(payload, delim2 + 1) as int
+            if ValidShortcut(key2, mods2)
+                if Math.LogicalAnd(mods2, 1) != 0
+                    Input.HoldKey(42)
+                endif
+                if Math.LogicalAnd(mods2, 2) != 0
+                    Input.HoldKey(54)
+                endif
+                if Math.LogicalAnd(mods2, 4) != 0
+                    Input.HoldKey(29)
+                endif
+                if Math.LogicalAnd(mods2, 8) != 0
+                    Input.HoldKey(157)
+                endif
+                if Math.LogicalAnd(mods2, 16) != 0
+                    Input.HoldKey(56)
+                endif
+                if Math.LogicalAnd(mods2, 32) != 0
+                    Input.HoldKey(184)
+                endif
+                Input.TapKey(key2)
+                if Math.LogicalAnd(mods2, 32) != 0
+                    Input.ReleaseKey(184)
+                endif
+                if Math.LogicalAnd(mods2, 16) != 0
+                    Input.ReleaseKey(56)
+                endif
+                if Math.LogicalAnd(mods2, 8) != 0
+                    Input.ReleaseKey(157)
+                endif
+                if Math.LogicalAnd(mods2, 4) != 0
+                    Input.ReleaseKey(29)
+                endif
+                if Math.LogicalAnd(mods2, 2) != 0
+                    Input.ReleaseKey(54)
+                endif
+                if Math.LogicalAnd(mods2, 1) != 0
+                    Input.ReleaseKey(42)
+                endif
+                ReportAction(request, "sent")
+                return
+            endif
+        endif
+        ReportAction(request, "failure")
+        return
     elseif StringUtil.Find(payload, "shortcut:") == 0
         int delim = StringUtil.Find(payload, ":", 9)
         if delim > 9
@@ -306,13 +594,17 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     string kind = StringUtil.Substring(payload, 0, first)
     int epoch = StringUtil.Substring(payload, first + 1, second - first - 1) as int
     int token = StringUtil.Substring(payload, second + 1) as int
-    if epoch != _epoch || token < 0
+    if (epoch != _activeEpoch && epoch != _previousEpoch) || epoch == 0 || token < 0
         Debug.Trace("[NirnCommand] Stale catalog token")
         ReportAction(request, "unavailable")
         return
     endif
     Actor player = Game.GetPlayer()
-    Form target = StorageUtil.FormListGet(player, "NirnCommand.Forms", token)
+    int targetSlot = _slot
+    if epoch == _previousEpoch
+        targetSlot = _previousSlot
+    endif
+    Form target = StorageUtil.FormListGet(player, "NirnCommand.Forms" + targetSlot, token)
     if kind == "item" && target && player.GetItemCount(target) > 0 && ((target as Weapon) || (target as Armor) || (target as Potion))
         player.EquipItem(target)
         ReportAction(request, "sent")

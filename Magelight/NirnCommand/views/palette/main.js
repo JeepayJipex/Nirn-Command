@@ -22,16 +22,32 @@
   const statics = [];
   const seen = new Set();
   let configWarnings=0;
-  for (const entry of [...(window.NIRN_SCANNED_COMMANDS || []), ...(window.NIRN_COMMANDS || []), ...(window.NIRN_USER_COMMANDS || [])]) {
+  for (const entry of [...(window.NIRN_SCANNED_COMMANDS || []), ...(window.NIRN_COMMANDS || [])]) {
     if (!entry || typeof entry.id !== 'string' || !entry.id || typeof entry.label !== 'string' || typeof entry.action !== 'string') { configWarnings++; continue; }
     if (seen.has(entry.id)) { if (entry.id !== 'builtin:oar:menu') configWarnings++; continue; }
-    if (!/^(console:|skyrimnet:|shortcut:|local:)/.test(entry.action)) { configWarnings++; continue; }
+    if (!/^(console:|skyrimnet:|shortcut:|oar:|local:)/.test(entry.action)) { configWarnings++; continue; }
     seen.add(entry.id); statics.push(entry);
   }
   if (configWarnings) console.warn(`[NirnCommand] Ignored ${configWarnings} invalid or duplicate commands.`);
+  let modDiscovered=[], incomingMods=[];
   let discovered = [], incoming = [], epoch = '', selected = 0, results = [], pending = {}, serial = 0, queued = false, clearRequestedAt = 0, clearKind = '', capabilities = null, isOpen = false;
   let fallbackReady=false, fallbackReading=false, fallbackDirty=false, fallbackWriting=false, fallbackSlot=0, fallbackParts=[], fallbackCount=0, fallbackRequest=0, fallbackPending=null;
   const fallbackTouched=new Set();
+  let openingHotkey={key:210,mask:0};
+  function ensureCommands() {
+    if (Array.isArray(settings.commands)) return;
+    const used=new Set(statics.map(entry=>entry.id));
+    settings.commands=(window.NIRN_USER_COMMANDS || []).filter(entry=>entry && typeof entry.id==='string' && entry.id.startsWith('user:') && typeof entry.label==='string' && typeof entry.action==='string' && /^(console:|skyrimnet:|shortcut:)/.test(entry.action) && !used.has(entry.id) && used.add(entry.id));
+    if(settings.commands.length) save('settings',settings);
+  }
+  const editor=window.NirnEditor?.create({
+    getCommands:()=>settings.commands || [],
+    setCommands:commands=>{settings.commands=commands;save('settings',settings);render();},
+    getHotkey:()=>openingHotkey,
+    setHotkey:(key,mask)=>{if(bridge) bridge.send('hotkey',`${key}|${mask}`);},
+    onClose:()=>{if(bridge) bridge.send('__escapecapture','0');input.focus();render();}
+  });
+  if(storageAvailable) ensureCommands();
   function flushFallback() {
     if (storageAvailable || !bridge || !fallbackReady || fallbackWriting || !fallbackDirty) return;
     fallbackDirty=false; fallbackWriting=true;
@@ -57,7 +73,7 @@
       if (!fallbackTouched.has('favorites') && Array.isArray(saved.favorites)) favorites=saved.favorites;
       if (!fallbackTouched.has('usage') && saved.usage && typeof saved.usage==='object' && !Array.isArray(saved.usage)) usage=saved.usage;
       if (!fallbackTouched.has('settings') && saved.settings && typeof saved.settings==='object' && !Array.isArray(saved.settings)) settings=saved.settings;
-      fallbackReady=true; fallbackTouched.clear(); render(); flushFallback();
+      fallbackReady=true; fallbackTouched.clear(); ensureCommands(); render(); flushFallback();
     } catch (_) { statusEl.textContent='Preferences could not be read'; }
   };
   window.ncPersistAck = function(payload) {
@@ -69,7 +85,7 @@
     if (!capabilities) return true;
     if (entry.action.startsWith('console:')) return capabilities[0];
     if (entry.action.startsWith('skyrimnet:')) return capabilities[1];
-    if (entry.id === 'builtin:oar:menu') return capabilities[2];
+    if (entry.action === 'oar:menu') return capabilities[2];
     return true;
   }
   const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -90,10 +106,10 @@
       const pos = q.indexOf('>'), raw = q.slice(pos + 1);
       return raw.trim() ? [{ id:'direct:' + raw, label:'Run: ' + raw, detail:'Console command', kind:'Console', action:'console:' + raw, transient:true }] : [];
     }
-    const entries = statics.concat(discovered).filter(entry => settings.showUnavailable !== false || available(entry));
+    const entries = statics.concat(settings.commands || [], modDiscovered, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
     if (!query) {
       const byId = new Map(entries.map(e => [e.id, e]));
-      const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id)];
+      const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...(settings.commands || []).map(e => e.id)];
       return [...new Set(ordered)].map(id => byId.get(id)).filter(Boolean).slice(0, 20);
     }
     return entries.map(entry => ({ entry, score:score(entry, query) }))
@@ -106,7 +122,7 @@
     if (!results.length) { const empty = document.createElement('div'); empty.className='empty'; empty.textContent='No results.'; resultsEl.appendChild(empty); return; }
     const frag = document.createDocumentFragment();
     results.forEach((entry,i) => {
-      const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); row.setAttribute('aria-selected',String(i === selected));
+      const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
       const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧'})[entry.kind] || '✦';
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; label.textContent=entry.label;
       const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : 'Unavailable: dependency not detected'; info.append(label,detail);
@@ -134,6 +150,7 @@
       } else { clearKind=kind; clearRequestedAt=Date.now(); statusEl.textContent='Activate again within five seconds to clear ' + kind; }
       return;
     }
+    if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey') { if (!storageAvailable && !fallbackReady) {statusEl.textContent='Preferences still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : 'command');} return; }
     if (entry?.action === 'local:toggle-unavailable') { settings.showUnavailable=settings.showUnavailable===false; save('settings',settings); statusEl.textContent=settings.showUnavailable ? 'Unavailable actions shown' : 'Unavailable actions hidden'; render(); return; }
     if (entry?.action === 'local:refresh') { if (bridge) { bridge.send('catalog','refresh'); statusEl.textContent='Loading…'; } return; }
     if (!entry || !bridge) { statusEl.textContent='Bridge unavailable'; return; }
@@ -154,11 +171,15 @@
       usage[entry.id].lastResult=result; save('usage',usage);
     }
   };
+  window.ncHotkey = function(payload) { const [key,mask]=String(payload).split('|').map(Number); if(Number.isInteger(key) && Number.isInteger(mask)) openingHotkey={key,mask}; };
+  window.ncHotkeyResult = function(payload) { editor?.hotkeyResult(payload==='ok'); statusEl.textContent=payload==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
   window.ncCapabilities = function(payload) { capabilities=String(payload).split('|').map(value=>value==='1'); render(); };
-  window.ncGameLoaded = function() { discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncDiscoveryBegin = function() { incomingMods=[]; };
+  window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && entry.id.startsWith('mcm:') && typeof entry.label==='string' && /^shortcut2:[0-9]+:0$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
+  window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
+  window.ncGameLoaded = function() { modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncBridgeReady = function() {
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
-    if (isOpen && bridge) bridge.send('catalog','refresh');
   };
   window.ncCatalogBegin = function(value) { epoch=String(value); incoming=[]; };
   window.ncCatalogComplete = function(value) { if (String(value)!==epoch) return; discovered=incoming; incoming=[]; statusEl.textContent='Catalog ready'; render(); };
@@ -170,13 +191,19 @@
     if (!queued) { queued=true; requestAnimationFrame(()=>{queued=false; statusEl.textContent=`Loading ${incoming.length} entries`;}); }
   };
   input.addEventListener('input',()=>{selected=0;render();});
+  let heldModifiers=0;
+  const modifierBits={ShiftLeft:1,ShiftRight:2,ControlLeft:4,ControlRight:8,AltLeft:16,AltRight:32};
   document.addEventListener('keydown',event=>{
+    if (editor?.isOpen()) { editor.keydown(event); return; }
     if (event.isComposing || event.keyCode===229) return;
+    if (modifierBits[event.code]) heldModifiers |= modifierBits[event.code];
+    if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('hotkey','close'); return;}
     if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
     else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
     else if (event.key==='Enter' || event.code==='NumpadEnter') {event.preventDefault();execute(results[selected],event.ctrlKey);}
   },true);
-  function open() { input.value=''; selected=0; render(); requestAnimationFrame(()=>input.focus()); if (bridge) {bridge.send('catalog','refresh'); statusEl.textContent=configWarnings ? `${configWarnings} invalid or duplicate commands` : 'Loading…';} }
-  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; if(isOpen) open(); });
+  document.addEventListener('keyup',event=>{ if(editor?.isOpen()) editor.keyup(event); if(modifierBits[event.code]) heldModifiers &= ~modifierBits[event.code]; },true);
+  function open() { input.value=''; selected=0; render(); requestAnimationFrame(()=>input.focus()); statusEl.textContent=discovered.length ? 'Catalog ready' : 'Preparing catalog…'; }
+  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; if(isOpen) open(); else {heldModifiers=0; if(editor?.isOpen()) editor.hide();} });
   render();
 })();

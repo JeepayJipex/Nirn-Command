@@ -4,6 +4,8 @@ Set-Location $PSScriptRoot
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 & node (Join-Path $PSScriptRoot 'tests/palette.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Palette tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/editor.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Editor tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/scanner.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Scanner tests failed' }
 foreach ($path in @($config.compiler, $config.flags, $config.skyrimMaster, $config.xDump) + @($config.imports)) {

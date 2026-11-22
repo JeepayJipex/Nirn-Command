@@ -1,7 +1,27 @@
 #include "PCH.h"
 #include "OpenAnimationReplacerAPI-UI.h"
+#include "discovery.h"
 
 namespace {
+    std::mutex discoveryMutex;
+    std::vector<std::string> discoveryEntries;
+    void RefreshDiscovery(RE::StaticFunctionTag*)
+    {
+        auto entries = nirn::discover_mcm("Data");
+        std::scoped_lock lock(discoveryMutex);
+        discoveryEntries = std::move(entries);
+    }
+    std::int32_t DiscoveryCount(RE::StaticFunctionTag*)
+    {
+        std::scoped_lock lock(discoveryMutex);
+        return static_cast<std::int32_t>(discoveryEntries.size());
+    }
+    RE::BSFixedString DiscoveryEntry(RE::StaticFunctionTag*, std::int32_t index)
+    {
+        std::scoped_lock lock(discoveryMutex);
+        if (index < 0 || static_cast<std::size_t>(index) >= discoveryEntries.size()) return "";
+        return discoveryEntries[index];
+    }
     OAR_API::UI::IUIInterface* OarUI()
     {
         auto module = GetModuleHandleA("OpenAnimationReplacer.dll");
@@ -16,11 +36,14 @@ namespace {
     {
         auto api = OarUI();
         if (!api) return false;
-        api->ToggleMenu();
+        SKSE::GetTaskInterface()->AddTask([api]() { api->ToggleMenu(); });
         return true;
     }
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm)
     {
+        vm->RegisterFunction("RefreshDiscovery", "NirnCommandNative", RefreshDiscovery);
+        vm->RegisterFunction("DiscoveryCount", "NirnCommandNative", DiscoveryCount);
+        vm->RegisterFunction("DiscoveryEntry", "NirnCommandNative", DiscoveryEntry);
         vm->RegisterFunction("IsOarAvailable", "NirnCommandNative", IsOarAvailable);
         vm->RegisterFunction("ToggleOar", "NirnCommandNative", ToggleOar);
         return true;

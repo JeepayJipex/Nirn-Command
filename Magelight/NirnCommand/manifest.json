@@ -9,7 +9,7 @@
       "path": "views/palette/index.html",
       "layer": "panel",
       "fullscreen": true,
-      "hotkey": "Insert",
+      "hotkey": 0,
       "hotkeyPause": true,
       "prepaint": true,
       "hitTest": "content"
