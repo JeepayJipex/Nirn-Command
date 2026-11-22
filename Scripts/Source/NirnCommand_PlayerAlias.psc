@@ -505,15 +505,25 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
                 kind = "spell"
             endif
             string row = NirnCommandNative.CatalogEntry(kind, sendEpoch + ":" + i, PersistentKey(item, kind), item.GetName())
-            if StringUtil.GetLength(batch) + StringUtil.GetLength(row) > 1024 && batch != ""
+            if StringUtil.GetLength(batch) + StringUtil.GetLength(row) + 1 > 960 && batch != ""
                 Magelight.Call(sendView, "ncCatalogBatch", sendEpoch + "|" + batchIndex + "|" + batch)
                 batchIndex += 1
                 batch = ""
             endif
-            if batch != ""
-                batch += "\n"
+            if StringUtil.GetLength(row) > 960
+                string[] fragments = NirnCommandNative.CatalogFragments(row)
+                int part = 0
+                while part < fragments.Length && scanEpoch == _epoch && viewGeneration == _viewGeneration && _domReady
+                    Magelight.Call(sendView, "ncCatalogFragment", sendEpoch + "|" + batchIndex + "|" + part + "|" + fragments.Length + "|" + fragments[part])
+                    batchIndex += 1
+                    part += 1
+                endwhile
+            else
+                if batch != ""
+                    batch += "\n"
+                endif
+                batch += row
             endif
-            batch += row
         endif
         i += 1
         if i % 40 == 0

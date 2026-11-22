@@ -13,3 +13,4 @@ int Function GetHotkey(int part) Global Native
 bool Function SetHotkey(int keyCode, int modifiers) Global Native
 Form[] Function InventoryForms(Actor player) Global Native
 string Function CatalogEntry(string kind, string token, string id, string name) Global Native
+string[] Function CatalogFragments(string row) Global Native
