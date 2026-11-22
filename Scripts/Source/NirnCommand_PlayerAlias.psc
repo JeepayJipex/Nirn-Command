@@ -79,8 +79,13 @@ Event OnUpdate()
     endif
     float now = Utility.GetCurrentRealTime()
     if !_scanning && !_sending && !Magelight.IsUIModeActive() && !Utility.IsInMenuMode()
-        if (_dirty && now - _lastChange >= 0.5) || now - _lastScan >= 30.0
+        if _dirty && now - _lastChange >= 0.5
             ScanCatalog()
+        elseif now - _lastScan >= 30.0
+            _lastScan = now
+            if SpellCatalogChanged()
+                ScanCatalog()
+            endif
         endif
         if now - _lastDiscovery >= 30.0
             _lastDiscovery = now
@@ -541,6 +546,44 @@ Function PublishCatalog(int sendSlot, int sendEpoch, bool commit)
     endif
 EndFunction
 
+bool Function SpellCatalogChanged()
+    Actor player = Game.GetPlayer()
+    string candidate = "NirnCommand.SpellCheck"
+    string snapshot = "NirnCommand.SpellSnapshot"
+    StorageUtil.FormListClear(player, candidate)
+    int i = 0
+    while i < player.GetSpellCount()
+        Spell known = player.GetNthSpell(i)
+        if known && known.GetEquipType() && player.HasSpell(known) && known.GetName() != ""
+            StorageUtil.FormListAdd(player, candidate, known, false)
+        endif
+        i += 1
+    endwhile
+    ActorBase base = player.GetActorBase()
+    if base
+        i = 0
+        while i < base.GetSpellCount()
+            Spell known = base.GetNthSpell(i)
+            if known && known.GetEquipType() && known.GetName() != ""
+                StorageUtil.FormListAdd(player, candidate, known, false)
+            endif
+            i += 1
+        endwhile
+    endif
+    int count = StorageUtil.FormListCount(player, candidate)
+    if count != StorageUtil.FormListCount(player, snapshot)
+        return true
+    endif
+    i = 0
+    while i < count
+        if StorageUtil.FormListFind(player, snapshot, StorageUtil.FormListGet(player, candidate, i)) < 0
+            return true
+        endif
+        i += 1
+    endwhile
+    return false
+EndFunction
+
 Function ScanCatalog()
     if _scanning || _sending
         return
@@ -606,12 +649,15 @@ Function ScanCatalog()
     endif
     float inventorySeconds = Utility.GetCurrentRealTime() - scanStarted
     float spellsStarted = Utility.GetCurrentRealTime()
+    string spellList = "NirnCommand.ScanSpells"
+    StorageUtil.FormListClear(player, spellList)
     i = 0
     total = player.GetSpellCount()
     while i < total && scanEpoch == _epoch
         Spell knownSpell = player.GetNthSpell(i)
         if knownSpell && knownSpell.GetEquipType() && player.HasSpell(knownSpell) && knownSpell.GetName() != ""
-            StorageUtil.FormListAdd(player, list, knownSpell)
+            StorageUtil.FormListAdd(player, list, knownSpell, false)
+            StorageUtil.FormListAdd(player, spellList, knownSpell, false)
         endif
         i += 1
         if i % 40 == 0
@@ -626,6 +672,7 @@ Function ScanCatalog()
             Spell baseSpell = playerBase.GetNthSpell(i)
             if baseSpell && baseSpell.GetEquipType() && baseSpell.GetName() != "" && StorageUtil.FormListFind(player, list, baseSpell) < 0
                 StorageUtil.FormListAdd(player, list, baseSpell)
+                StorageUtil.FormListAdd(player, spellList, baseSpell, false)
             endif
             i += 1
             if i % 40 == 0
@@ -644,10 +691,14 @@ Function ScanCatalog()
             i += 1
         endwhile
         if identical
+            StorageUtil.FormListCopy(player, "NirnCommand.SpellSnapshot", StorageUtil.FormListToArray(player, spellList))
             _lastScan = Utility.GetCurrentRealTime()
             _scanning = false
         elseif !_sending && !Magelight.IsUIModeActive()
             PublishCatalog(nextSlot, scanEpoch, true)
+            if _activeEpoch == scanEpoch
+                StorageUtil.FormListCopy(player, "NirnCommand.SpellSnapshot", StorageUtil.FormListToArray(player, spellList))
+            endif
             _scanning = false
         else
             _fullScan = true
