@@ -702,6 +702,21 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
         HandleHotkey(StringUtil.Substring(payload, 7), request)
         return
     endif
+    if StringUtil.Find(payload, "skyrimnet:") == 0 && SKSE.GetPluginVersion("SkyrimNet") < 0
+        Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
+        return
+    elseif payload == "oar:menu"
+        if SKSE.GetPluginVersion("OpenAnimationReplacer") < 0
+            Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
+            return
+        elseif SKSE.GetPluginVersion("NirnCommandNative") < 0 || !NirnCommandNative.IsOarAvailable()
+            Magelight.Call(_viewId, "ncActionResult", request + "|incompatible_api")
+            return
+        endif
+    elseif StringUtil.Find(payload, "console:") == 0 && SKSE.GetPluginVersion("ConsoleUtilSSE") < 0 && SKSE.GetPluginVersion("ConsoleUtil") < 0
+        Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
+        return
+    endif
     Magelight.ShowView(_viewId, false)
     bool released = Magelight.ReleaseUIMode("NirnCommand")
     if !released && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId

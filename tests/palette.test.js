@@ -30,7 +30,7 @@ window.ncCatalogComplete('7'); assert.deepEqual(sent.pop(),['catalog','applied|7
 search('fireball'); key('Enter',{ctrlKey:true}); assert.deepEqual(sent.pop(),['execute','1|spellleft:7:0']);
 window.ncActionResult('1|sent'); assert.equal(JSON.parse(store.get('nirn-command:v1:usage'))['game:spell:Skyrim.esm:42'].lastResult,'sent');
 key('d',{ctrlKey:true}); assert.ok(JSON.parse(store.get('nirn-command:v1:favorites')).includes('game:spell:Skyrim.esm:42'));
-window.ncCapabilities('0|0|0'); search('> player.additem f 1'); key('Enter'); assert.equal(sent.length,0); assert.equal(status.textContent,'Action unavailable');
+window.ncCapabilities('0|0|0'); search('> player.additem f 1'); key('Enter'); assert.equal(sent.length,0); assert.equal(status.textContent,'Unavailable: required plugin not detected.');
 window.ncCapabilities('1|1|1'); key('Enter',{isComposing:true}); assert.equal(sent.length,0); key('Enter'); assert.deepEqual(sent.pop(),['execute','2|console: player.additem f 1']);
 window.ncCatalogBegin('8'); search('fireball'); assert.equal(results.children[0].children[1].children[0].textContent,'Fireball'); window.ncCatalogComplete('8'); assert.deepEqual(sent.pop(),['catalog','applied|8']); search('fireball'); assert.equal(results.children.length,1); assert.equal(results.children[0].children[1].children[0].textContent,'Fireball Camera');
 window.ncGameLoaded(); search('fireball'); assert.equal(results.children.length,1);

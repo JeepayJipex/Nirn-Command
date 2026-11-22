@@ -139,6 +139,10 @@
     if (entry.action === 'oar:menu') return capabilities[2];
     return true;
   }
+  function unavailableReason(entry) {
+    if (entry.action === 'oar:menu' && capabilities?.[3]) return 'Unavailable: incompatible UI API. Use a custom shortcut.';
+    return 'Unavailable: required plugin not detected.';
+  }
   const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const searchCache = new WeakMap();
   function score(entry, query) {
@@ -176,7 +180,7 @@
       const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
       const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧'})[entry.kind] || '✦';
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; label.textContent=entry.label;
-      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : 'Unavailable: dependency not detected'; info.append(label,detail);
+      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : unavailableReason(entry); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
       const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind || '';
       row.append(icon,info,star,kind);
@@ -205,7 +209,7 @@
     if (entry?.action === 'local:toggle-unavailable') { settings.showUnavailable=settings.showUnavailable===false; save('settings',settings); statusEl.textContent=settings.showUnavailable ? 'Unavailable actions shown' : 'Unavailable actions hidden'; render(); return; }
     if (entry?.action === 'local:refresh') { if (bridge) { bridge.send('catalog','refresh'); statusEl.textContent='Loading…'; } return; }
     if (!entry || !bridge) { statusEl.textContent='Bridge unavailable'; return; }
-    if (!available(entry)) { statusEl.textContent='Action unavailable'; return; }
+    if (!available(entry)) { statusEl.textContent=unavailableReason(entry); return; }
     const action=left && entry.action.startsWith('spell:') ? entry.action.replace('spell:','spellleft:') : entry.action;
     const request=String(++serial); pending[request]=entry;
     try { bridge.send('execute',request + '|' + action); statusEl.textContent='Action sent'; }
@@ -214,7 +218,7 @@
   }
   window.ncActionResult = function(payload) {
     const [request,result]=String(payload).split('|'); const entry=pending[request]; if (!entry) return; delete pending[request];
-    statusEl.textContent=({sent:'Action sent',success:'Action accepted',failure:'Action failed',unavailable:'Action unavailable'})[result] || 'Unknown result';
+    statusEl.textContent=({sent:'Action sent',success:'Action accepted',failure:'Action failed',unavailable:'Action unavailable',missing_plugin:'Required plugin not detected',incompatible_api:'Integration API unavailable or incompatible'})[result] || 'Unknown result';
     if ((result === 'sent' || result === 'success') && !entry.transient) {
       const now=Date.now(), old=usage[entry.id] || {}; usage[entry.id]={firstUsedAt:old.firstUsedAt || now,lastUsedAt:now,useCount:(old.useCount || 0)+1,lastResult:result};
       Object.keys(usage).sort((a,b)=>usage[b].lastUsedAt-usage[a].lastUsedAt).slice(100).forEach(id=>delete usage[id]); save('usage',usage);
