@@ -17,6 +17,14 @@ int main()
         require(nirn::read_commands(file,out)==0 && out==original,"unicode readback");
         require(!nirn::write_commands(file,R"({"version":1,"commands":false})"),"reject invalid payload");
         require(nirn::read_commands(file,out)==0 && out==original,"invalid write replaced prior data");
+        const auto overrideFile=root/"overrides.json";
+        const std::string overrides=R"({"version":1,"overrides":{"provider:example:open":{"hidden":true,"action":"shortcut2:37:4"}}})";
+        require(nirn::read_overrides(overrideFile,out)==1,"missing overrides file");
+        require(nirn::write_overrides(overrideFile,overrides),"write overrides");
+        require(nirn::read_overrides(overrideFile,out)==0 && out==overrides,"overrides readback");
+        require(!nirn::write_overrides(overrideFile,R"({"version":1,"overrides":[]})"),"reject invalid overrides");
+        require(nirn::read_overrides(overrideFile,out)==0 && out==overrides,"invalid overrides replaced prior data");
+        require(nirn::read_commands(file,out)==0 && out==original,"overrides changed commands");
         auto chunks=nirn::split_utf8(original,8);std::string joined;
         for(const auto& chunk:chunks) {require(chunk.size()<=8,"chunk size");joined+=chunk;}
         require(joined==original,"chunk data changed");

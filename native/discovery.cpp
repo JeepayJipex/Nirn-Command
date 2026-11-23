@@ -32,40 +32,6 @@ std::string fold(std::string value)
     return value;
 }
 }
-std::vector<std::string> discover_oar(const std::filesystem::path& data)
-{
-    std::ifstream input(data / "SKSE/Plugins/OpenAnimationReplacer.ini", std::ios::binary);
-    if (!input) return {};
-    bool inUI=false; std::unordered_map<std::string,std::string> fields;
-    auto trim=[](std::string value) {
-        const auto first=value.find_first_not_of(" \t\r\n");
-        if (first==std::string::npos) return std::string{};
-        return value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);
-    };
-    std::string line;
-    while (std::getline(input,line)) {
-        auto comment=line.find_first_of(";#"); if(comment!=std::string::npos) line.erase(comment);
-        line=trim(line); if(line.empty()) continue;
-        if(line.front()=='[' && line.back()==']') {inUI=fold(trim(line.substr(1,line.size()-2)))=="ui";continue;}
-        if(!inUI) continue;
-        auto eq=line.find('='); if(eq==std::string::npos) continue;
-        fields[fold(trim(line.substr(0,eq)))]=fold(trim(line.substr(eq+1)));
-    }
-    if(fields["benableui"]!="true" && fields["benableui"]!="1") return {};
-    const auto keyText=fields["utoggleuikey"];
-    if(keyText.empty() || keyText.size()>3 || !std::all_of(keyText.begin(),keyText.end(),[](unsigned char c){return std::isdigit(c);})) return {};
-    int key=std::stoi(keyText), mask=0;
-    if(key<=0 || key>=256 || key==42 || key==54 || key==29 || key==157 || key==56 || key==184) return {};
-    for(const auto& [name,bit] : {std::pair{"utoggleuikeyshift",1},std::pair{"utoggleuikeyctrl",4},std::pair{"utoggleuikeyalt",16}}) {
-        if(fields[name]!="0" && fields[name]!="1") return {};
-        if(fields[name]=="1") mask|=bit;
-    }
-    json entry={{"id","oar:configured"},{"label","Open Animation Replacer — configured shortcut"},{"kind","Mod"},
-        {"action","shortcut2:"+std::to_string(key)+":"+std::to_string(mask)},
-        {"detail","OAR INI · simulated key · reception unverified"},
-        {"source","SKSE/Plugins/OpenAnimationReplacer.ini [UI]"},{"confidence","configuration only"}};
-    return {entry.dump()};
-}
 std::vector<std::string> discover_mcm(const std::filesystem::path& data)
 {
     std::vector<std::string> out;

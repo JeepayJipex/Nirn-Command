@@ -56,12 +56,8 @@ window.ncCapabilities('1|1|0|1');
 window.ncDiscoveryBegin();
 window.ncDiscoveryEntry(JSON.stringify({id:'mcm:Example:open',label:'Example — Open',kind:'Mod',action:'shortcut2:37:0',source:'MCM/Settings/keybinds.json',confidence:'configured association'}));
 window.ncDiscoveryEntry(JSON.stringify({id:'mcm:Example:fake',label:'Unmapped',kind:'Mod',action:'console:tgm'}));
-window.ncDiscoveryEntry(JSON.stringify({id:'oar:configured',label:'OAR configured',kind:'Mod',action:'shortcut2:45:17',source:'OpenAnimationReplacer.ini',confidence:'configuration only'}));
 window.ncDiscoveryComplete();search('Example');assert.equal(results.children[0].children[1].children[0].textContent,'Example — Open');assert.match(results.children[0].title,/MCM/);
 search('Unmapped');assert.equal(results.children[0].textContent,'No results.');
-search('OAR configured');assert.equal(results.children[0].children[1].children[0].textContent,'OAR configured');
-window.ncCapabilities('1|1|1|1');search('OAR configured');assert.equal(results.children[0].textContent,'No results.');
-console.log('Discovered source, action validation, and OAR preference checks passed.');
 // Verify the persistent fallback sends bounded UTF-8 chunks and commits them in order.
 const sent2=[], handlers2={}, results2=new Element(), input2=new Element('input'), status2=new Element();
 const selectors2={'#query':input2,'#results':results2,'#meta':new Element(),'#status':status2};
@@ -70,7 +66,7 @@ const bridge2={send:(...args)=>sent2.push(args),on:(name,fn)=>{handlers2[name]=f
 const window2={magelight:bridge2,NIRN_COMMANDS:[{id:'user:é😀',label:'Special',kind:'Console',action:'console:tgm'}],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 const badStorage={getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');},removeItem(){throw Error('unavailable');}};
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window2,document:document2,localStorage:badStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
-window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['catalog','ready']); assert.deepEqual(sent2.shift(),['persist','read']); assert.deepEqual(sent2.shift(),['commands','read']);
+window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['catalog','ready']); assert.deepEqual(sent2.shift(),['persist','read']); assert.deepEqual(sent2.shift(),['commands','read']); assert.deepEqual(sent2.shift(),['overrides','read']);
 const previous=JSON.stringify({favorites:['user:é😀'],usage:{},settings:{showUnavailable:true}});
 window2.ncPersistBegin('0|1'); window2.ncPersistChunk('0|'+previous); window2.ncPersistDone();
 assert.equal(results2.children[0].children[2].textContent,'★');
@@ -97,7 +93,7 @@ const document3={querySelector:s=>({'#query':input3,'#results':results3,'#meta':
 const window3={magelight:{send:(...args)=>sent3.push(args),on:(name,fn)=>{handlers3[name]=fn;}},NIRN_COMMANDS:[],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[{id:'user:legacy',label:'Épée 😀',action:'console:help "été|é"'}]};
 const store3=new Map(), storage3={getItem:key=>store3.get(key)||null,setItem:(key,value)=>store3.set(key,value),removeItem:key=>store3.delete(key)};
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window3,document:document3,localStorage:storage3,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
-window3.ncBridgeReady(); assert.deepEqual(sent3.shift(),['catalog','ready']); assert.deepEqual(sent3.shift(),['commands','read']);
+window3.ncBridgeReady(); assert.deepEqual(sent3.shift(),['catalog','ready']); assert.deepEqual(sent3.shift(),['commands','read']); assert.deepEqual(sent3.shift(),['overrides','read']);
 window3.ncCommandsBegin('-1');window3.ncCommandsDone();
 let serialized='';let operations=[];
 while(sent3.length) {
@@ -118,3 +114,27 @@ assert.equal(options4.setHotkey(67,0,7),false);window4.ncHotkeyResult('99|ok');a
 window4.ncHotkeyResult('1|ok');assert.deepEqual(editor4.last,[true,7]);timers4.shift()();assert.equal(sent4.length,0);
 assert.equal(options4.setHotkey(68,0,8),true);sent4.shift();timers4.shift()();assert.deepEqual(editor4.last,['timeout',8]);assert.deepEqual(sent4.shift(),['execute','3|hotkey:get']);
 console.log('Hotkey routing, request correlation and timeout reconciliation checks passed.');
+// Fictional providers are independently searchable and honor saved overrides.
+window.ncOverridesBegin('1');window.ncOverridesChunk('0|'+JSON.stringify({version:1,overrides:{'provider:alpha:open':{action:'shortcut2:66:4'},'provider:beta:hidden':{hidden:true},'provider:removed:old':{hidden:true}}}));window.ncOverridesDone();
+window.ncCapabilities('1|1');window.ncDiscoveryBegin();
+window.ncDiscoveryEntry(JSON.stringify({id:'provider:alpha:open',label:'Alpha open',kind:'Mod',action:'shortcut2:37:0',requirementsMet:true}));
+window.ncDiscoveryEntry(JSON.stringify({id:'provider:beta:hidden',label:'Beta hidden',kind:'Mod',action:'console:tgm',requirementsMet:true}));
+window.ncDiscoveryEntry(JSON.stringify({id:'provider:beta:missing',label:'Beta missing',kind:'Mod',action:'console:tcl',requirementsMet:false}));
+window.ncDiscoveryComplete();search('Alpha open');key('Enter');assert.equal(sent.pop()[1].split('|')[1],'shortcut2:66:4');
+search('Beta hidden');assert.equal(results.children[0].textContent,'No results.');
+search('Beta missing');key('Enter');assert.equal(status.textContent,'Unavailable: required plugin not detected.');
+window.ncDiscoveryBegin();window.ncDiscoveryComplete();search('Alpha open');assert.equal(results.children[0].textContent,'No results.');
+window.ncDiscoveryBegin();window.ncDiscoveryEntry(JSON.stringify({id:'provider:alpha:open',label:'Alpha open',kind:'Mod',action:'shortcut2:37:0',requirementsMet:true}));window.ncDiscoveryComplete();search('Alpha open');key('Enter');assert.equal(sent.pop()[1].split('|')[1],'shortcut2:66:4');
+console.log('Provider overrides, missing requirements and removal/reinstallation passed.');
+// Override transaction sends UTF-8-safe chunks and waits for each acknowledgement.
+window4.ncOverridesBegin('-1');window4.ncOverridesDone();
+assert.equal(options4.setOverride('provider:alpha:open',{hidden:true,action:'shortcut2:37:4'}),true);
+let overrideText='',overrideOps=[];
+while(sent4.length) {
+  const [channel,payload]=sent4.shift(); assert.equal(channel,'overrides');
+  const first=payload.indexOf('|'),second=payload.indexOf('|',first+1),op=payload.slice(0,first),request=second<0?payload.slice(first+1):payload.slice(first+1,second);
+  overrideOps.push(op); if(op==='write') {const part=payload.slice(second+1);assert.ok(Buffer.byteLength(part,'utf8')<=400);overrideText+=part;}
+  window4.ncOverridesAck(request+'|ok');
+}
+assert.equal(overrideOps[0],'begin');assert.equal(overrideOps.at(-1),'commit');assert.equal(JSON.parse(overrideText).overrides['provider:alpha:open'].hidden,true);
+console.log('Override storage transaction and acknowledgements passed.');
