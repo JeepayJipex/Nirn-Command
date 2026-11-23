@@ -41,3 +41,13 @@ Include the relevant `[NirnCommand]` lines from Papyrus logs, `NirnCommandNative
 The native Windows build uses CommonLibSSE-NG, vcpkg and CMake. GitHub Actions builds the DLL and runs the native tests; the artifact contains the DLL and dependency license files. Place the DLL at `build/native/NirnCommandNative.dll` and the artifact's `licenses` directory at `build/native/licenses`, or pass `-NativeDll` and `-NativeLicenses` to `build.ps1`.
 
 Install Node.js, the Creation Kit Papyrus compiler and matching Skyrim, SKSE, Magelight, PapyrusUtil and SkyrimNet script sources. Copy `config.example.json` to ignored `config.local.json` and fill its local paths. Run `./build.ps1`. It checks the JS tests and syntax, builds the ESP and PEX scripts, checks the ESP with xEdit, requires the native DLL and licenses, validates the MO2 ZIP, and writes a SHA-256 sidecar. No MO2 installation or other mod's configuration is changed by the build.
+
+## Search benchmarks
+
+Run `node tests/performance.js` for synthetic index and search timings. To measure the actual palette's DOM updates and forced layout, open `tests/performance-browser.html` in Chromium with local file access enabled. For a reproducible Windows headless run from the repository root:
+
+```powershell
+& 'C:\Program Files\Google\Chrome\Application\chrome.exe' --headless --disable-gpu --no-sandbox --allow-file-access-from-files --disable-extensions --user-data-dir="$env:TEMP\nirn-search-benchmark" --virtual-time-budget=120000 --dump-dom "$(Resolve-Path 'tests/performance-browser.html' | ForEach-Object { [Uri]::new($_.Path).AbsoluteUri })"
+```
+
+The browser benchmark uses the real palette and synthetic catalogs, runs 10 warmups and 30 measured queries per size, and forces layout after each input. It does not measure painting, Skyrim, Magelight, or input-to-display latency in game.

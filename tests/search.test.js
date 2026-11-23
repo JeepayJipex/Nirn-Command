@@ -18,3 +18,10 @@ assert.deepEqual(find('zz'),[]);
 idx.replace('test',[entry('new','New entry')]); assert.deepEqual(find('fireball'),[]); assert.equal(find('new')[0],'new');
 console.log('Search ranking, Unicode, aliases, fuzzy matching and index replacement passed.');
 
+
+const ties=search.create();
+ties.replace('test',[entry('a','Silver Sword'),entry('b','Silver Shield'),entry('c','Silver Staff')]);
+assert.deepEqual(ties.search('silver',{favorites:['c'],usage:{a:{useCount:40,lastUsedAt:99},b:{useCount:5,lastUsedAt:10},c:{useCount:1}}}).map(x=>x.id),['c','a','b']);
+assert.deepEqual(ties.search('silver',{usage:{a:{useCount:2,lastUsedAt:10},b:{useCount:2,lastUsedAt:20}}}).map(x=>x.id),['b','a','c']);
+assert.equal(ties.search('silver sword',{favorites:['c'],usage:{c:{useCount:999}}})[0].id,'a');
+console.log('Favorites, frequency, recency and exact-match precedence passed.');

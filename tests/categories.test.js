@@ -17,3 +17,12 @@ const label=results.children[0].children[1].children[0];
 assert.equal(label.children[0].textContent,'E\u0301pee');assert.equal(label.children[1].textContent,' de fer');
 input.value='zzz';input.listeners.input();assert.match(results.children[0].textContent,/No items/);
 console.log('Unicode highlighting and category-specific empty state passed.');
+
+// Keep keyboard selection across catalog publication and reset when it disappears.
+window.ncCatalogBegin('3');window.ncAddEntry('item|3:0|game:item:x:10|Iron Sword');window.ncAddEntry('item|3:1|game:item:x:11|Iron Shield');window.ncCatalogComplete('3');
+input.value='iron';input.listeners.input();key('ArrowDown');
+const selectedName=()=>results.children.find(row=>row.attrs['aria-selected']==='true').children[1].children[0].children.map(x=>x.textContent).join('');
+assert.equal(selectedName(),'Iron Sword');
+window.ncCatalogBegin('4');window.ncAddEntry('item|4:0|game:item:x:10|Iron Sword');window.ncAddEntry('item|4:1|game:item:x:11|Iron Shield');window.ncAddEntry('item|4:2|game:item:x:12|Iron Arrow');window.ncCatalogComplete('4');assert.equal(selectedName(),'Iron Sword');
+window.ncCatalogBegin('5');window.ncAddEntry('item|5:0|game:item:x:11|Iron Shield');window.ncCatalogComplete('5');assert.equal(selectedName(),'Iron Shield');
+console.log('Keyboard selection survives catalog updates and resets after removal.');
