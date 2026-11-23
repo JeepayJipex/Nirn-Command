@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict');
+const search=require('../Magelight/NirnCommand/views/palette/search.js');
+const idx=search.create();
+const entry=(id,label,extra={})=>({id,label,kind:'Item',...extra});
+idx.replace('test',[entry('fire','Fireball'),entry('steel','Steel Sword'),entry('heal','Fast Healing'),entry('god','Toggle god mode'),entry('accent','Épée'),entry('alias','Light', {aliases:['luminosity'],keywords:'illumination'}),entry('fuzzy','Firebald')]);
+const find=q=>idx.search(q).map(x=>x.id);
+assert.ok(find('firebal').includes('fire'));
+assert.equal(find('steel sw')[0],'steel');
+assert.equal(find('heal fast')[0],'heal');
+assert.equal(find('god mode')[0],'god');
+assert.equal(find('EPEE')[0],'accent');
+assert.equal(find('luminosity')[0],'alias');
+assert.equal(find('illumination')[0],'alias');
+assert.equal(find('fireball')[0],'fire');
+assert.equal(idx.search('fireball',{favorites:['fuzzy'],usage:{fuzzy:{useCount:999}}})[0].id,'fire');
+assert.ok(find('frieball').includes('fire'));
+assert.deepEqual(find('zz'),[]);
+idx.replace('test',[entry('new','New entry')]); assert.deepEqual(find('fireball'),[]); assert.equal(find('new')[0],'new');
+console.log('Search ranking, Unicode, aliases, fuzzy matching and index replacement passed.');
+

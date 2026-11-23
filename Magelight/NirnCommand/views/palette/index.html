@@ -9,12 +9,13 @@
 <body>
   <div id="root">
     <main class="palette" role="dialog" aria-label="Nirn Command">
-      <header class="brand"><span class="mark">✦</span> NIRN COMMAND <span class="edition">PERSONAL BUILD · 0.4.0</span></header>
+      <header class="brand"><span class="mark">✦</span> NIRN COMMAND <span class="edition">PERSONAL BUILD · 0.5.0</span></header>
       <div class="search-area">
         <span class="search-icon">⌕</span>
         <input id="query" type="search" autocomplete="off" spellcheck="false" placeholder="Spell, item, mod, place, command…" aria-label="Search commands" />
         <kbd>ESC</kbd>
       </div>
+      <nav id="categories" class="categories" aria-label="Filter results by category"></nav>
       <div id="meta" class="meta">QUICK COMMANDS</div>
       <section id="results" role="listbox" aria-label="Results"></section>
       <footer>
@@ -29,6 +30,7 @@
   <script src="./scanned-commands.js"></script>
   <script src="./user-commands.js"></script>
   <script src="./editor.js"></script>
+  <script src="./search.js"></script>
   <script src="./main.js"></script>
 </body>
 </html>

@@ -1,14 +1,16 @@
-# Nirn Command v0.4.0 — Universal Command Registry
+# Nirn Command v0.5.0 — Smart Search
 
 Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with **Insert** by default, search, navigate with the arrow keys and press Enter. Ctrl+Enter equips a spell in the left hand; Ctrl+D or the star toggles a favorite.
 
 ## Installation
 
-1. Install `NirnCommand-v0.4.0.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+1. Install `NirnCommand-v0.5.0.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
 2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet is optional.
 3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
 The DLL is built for Skyrim SE 1.5.97 and AE 1.6.1170, not VR. Use matching versions of every dependency. Automated builds do not establish that this release works in a Skyrim session; runtime behavior remains unverified until played.
+
+Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Items and Spells. Search ignores accents and capitalization, accepts partial words in any order, and tolerates small typing errors.
 
 ## Actions and discovery
 

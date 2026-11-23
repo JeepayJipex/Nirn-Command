@@ -172,48 +172,64 @@
   function unavailableReason(entry) {
     return 'Unavailable: required plugin not detected.';
   }
-  const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  const searchCache = new WeakMap();
-  function score(entry, query) {
-    let indexed = searchCache.get(entry);
-    if (!indexed) { indexed={label:normalize(entry.label),hay:normalize([entry.label,entry.detail,entry.keywords,entry.kind].join(' '))}; searchCache.set(entry,indexed); }
-    const {label,hay}=indexed;
-    if (label === query) return 1000;
-    if (label.startsWith(query)) return 800;
-    if (label.includes(query)) return 600;
-    if (hay.includes(query)) return 400;
-    return query.split(/\s+/).every(t => hay.includes(t)) ? 200 : -1;
-  }
+  const normalize=window.NirnSearch.normalize, searchIndex=window.NirnSearch.create();
+  const categories=['All','Actions','Items','Spells'];
+  let category='All', indexedStatics=false, indexedCommands=null, indexedCatalog=null;
   let indexedDiscovery=null, indexedOverrides=null, effectiveDiscovery=[];
+  function eligible(entry) {return (category==='All' || category===(entry.kind==='Item'?'Items':entry.kind==='Spell'?'Spells':'Actions')) && (settings.showUnavailable!==false || available(entry));}
+  function updateIndex() {
+    if(!indexedStatics){searchIndex.replace('static',statics);indexedStatics=true;}
+    if(indexedCommands!==commands){searchIndex.replace('commands',commands.filter(supportedUserCommand));indexedCommands=commands;}
+    if(indexedCatalog!==discovered){searchIndex.replace('catalog',discovered);indexedCatalog=discovered;}
+    if(indexedDiscovery!==modDiscovered || indexedOverrides!==overrides){
+      indexedDiscovery=modDiscovered;indexedOverrides=overrides;
+      effectiveDiscovery=modDiscovered.filter(e=>!overrides[e.id]?.hidden).map(e=>{const o=overrides[e.id];return e.id.startsWith('provider:') && e.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(o?.action||'')?{...e,action:o.action}:e;});
+      searchIndex.replace('providers',effectiveDiscovery);
+    }
+  }
+  function setCategory(next){category=next;selected=0;results=[];render();input.focus();}
+  const categoryEl=document.querySelector('#categories');
+  if(categoryEl) categories.forEach(name=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('mousedown',event=>event.preventDefault());button.addEventListener('click',()=>setCategory(name));categoryEl.appendChild(button);});
   function getResults() {
     const q = input.value, query = normalize(q);
     if (q.trimStart().startsWith('>')) {
       const pos = q.indexOf('>'), raw = q.slice(pos + 1);
       return raw.trim() ? [{ id:'direct:' + raw, label:'Run: ' + raw, detail:'Console command', kind:'Console', action:'console:' + raw, transient:true }] : [];
     }
-    if(indexedDiscovery!==modDiscovered || indexedOverrides!==overrides) {
-      indexedDiscovery=modDiscovered; indexedOverrides=overrides;
-      effectiveDiscovery=modDiscovered.filter(entry=>!overrides[entry.id]?.hidden).map(entry=>{const override=overrides[entry.id];return entry.id.startsWith('provider:') && entry.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(override?.action || '') ? {...entry,action:override.action} : entry;});
+    updateIndex();
+    if(!query){
+      const entries=searchIndex.entries().map(x=>x.entry).filter(eligible), byId=new Map(entries.map(e=>[e.id,e]));
+      const ordered=[...favorites.slice(0,8),...Object.keys(usage).sort((a,b)=>(usage[b].lastUsedAt||0)-(usage[a].lastUsedAt||0)).slice(0,8),...statics.map(e=>e.id),...commands.map(e=>e.id)];
+      if(category==='Items'||category==='Spells') ordered.push(...entries.slice().sort((a,b)=>normalize(a.label).localeCompare(normalize(b.label))||a.id.localeCompare(b.id)).map(e=>e.id));
+      return [...new Set(ordered)].map(id=>byId.get(id)).filter(Boolean).slice(0,20);
     }
-    const entries = statics.concat(commands.filter(supportedUserCommand), effectiveDiscovery, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
-    if (!query) {
-      const byId = new Map(entries.map(e => [e.id, e]));
-      const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...commands.map(e => e.id)];
-      return [...new Set(ordered)].map(id => byId.get(id)).filter(Boolean).slice(0, 20);
+    return searchIndex.search(query,{favorites,usage,filter:eligible});
+  }
+  function highlight(label, text, query) {
+    if (!document.createTextNode || query.trimStart().startsWith('>')) {label.textContent=text;return;}
+    const terms=normalize(query).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    if (!terms.length) {label.textContent=text;return;}
+    let normalized='', offsets=[];
+    for(let pos=0;pos<text.length;) {
+      const cp=String.fromCodePoint(text.codePointAt(pos)), start=pos; pos+=cp.length;
+      const folded=normalize(cp); for(let n=0;n<folded.length;n++){normalized+=folded[n];offsets.push([start,pos]);}
     }
-    return entries.map(entry => ({ entry, score:score(entry, query) }))
-      .filter(x => x.score >= 0).sort((a,b) => b.score - a.score || Number(favorites.includes(b.entry.id)) - Number(favorites.includes(a.entry.id)) || (usage[b.entry.id]?.useCount || 0) - (usage[a.entry.id]?.useCount || 0) || a.entry.label.localeCompare(b.entry.label)).slice(0,30).map(x => x.entry);
+    const marked=new Array(text.length).fill(false);
+    for(const term of terms){let at=0;while((at=normalized.indexOf(term,at))!==-1){const start=offsets[at][0],end=offsets[at+term.length-1][1];for(let i=start;i<end;i++)marked[i]=true;at+=term.length;}}
+    let start=0;while(start<text.length){let end=start+1;while(end<text.length && marked[end]===marked[start])end++;const part=text.slice(start,end);if(marked[start]){const mark=document.createElement('mark');mark.textContent=part;label.appendChild(mark);}else label.appendChild(document.createTextNode(part));start=end;}
   }
   function render() {
-    results = getResults(); selected = Math.min(selected, Math.max(0, results.length - 1));
+    const previous=results[selected]?.id; results=getResults();
+    const retained=previous ? results.findIndex(e=>e.id===previous) : -1; selected=retained>=0?retained:0;
+    if(categoryEl) Array.from(categoryEl.children).forEach((button,i)=>{button.classList.toggle('active',categories[i]===category);button.setAttribute('aria-pressed',String(categories[i]===category));});
     metaEl.textContent = `${results.length} RESULTS · INVENTORY, SPELLS & ACTIONS`;
     resultsEl.textContent = '';
-    if (!results.length) { const empty = document.createElement('div'); empty.className='empty'; empty.textContent='No results.'; resultsEl.appendChild(empty); return; }
+    if (!results.length) { const empty = document.createElement('div'); empty.className='empty'; empty.textContent=category==='All'?'No results.':'No '+category.toLowerCase()+' found. Try another search or category.'; resultsEl.appendChild(empty); return; }
     const frag = document.createDocumentFragment();
     results.forEach((entry,i) => {
       const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
       const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧'})[entry.kind] || '✦';
-      const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; label.textContent=entry.label;
+      const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; highlight(label,entry.label,input.value);
       const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : unavailableReason(entry); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
       const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind || '';
@@ -375,7 +391,7 @@
     incoming.push({id:id || `session:${type}:${token}`, persistent:!!id, label:name, kind:type==='item'?'Item':'Spell',detail:type==='item'?'Inventory · equip or consume':'Known spell · right hand',action:`${type}:${token}`});
     if (!queued) { queued=true; requestAnimationFrame(()=>{queued=false; statusEl.textContent=`Loading ${incoming.length} entries`;}); }
   };
-  input.addEventListener('input',()=>{selected=0;render();});
+  input.addEventListener('input',()=>{selected=0;results=[];render();});
   let heldModifiers=0;
   const modifierBits={ShiftLeft:1,ShiftRight:2,ControlLeft:4,ControlRight:8,AltLeft:16,AltRight:32};
   document.addEventListener('keydown',event=>{
@@ -383,13 +399,14 @@
     if (event.isComposing || event.keyCode===229) return;
     if (modifierBits[event.code]) heldModifiers |= modifierBits[event.code];
     if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('execute',`${++serial}|hotkey:close`); return;}
-    if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
+    if(event.key==='Tab' && !event.ctrlKey && !event.altKey && !event.metaKey){event.preventDefault();setCategory(categories[(categories.indexOf(category)+(event.shiftKey?-1:1)+categories.length)%categories.length]);}
+    else if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
     else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
     else if (event.key==='Enter' || event.code==='NumpadEnter') {event.preventDefault();execute(results[selected],event.ctrlKey);}
   },true);
   document.addEventListener('keyup',event=>{ if(editor?.isOpen()) editor.keyup(event); if(modifierBits[event.code]) heldModifiers &= ~modifierBits[event.code]; },true);
   function open() {
-    input.value=''; selected=0; render(); requestAnimationFrame(()=>input.focus());
+    input.value=''; category='All'; selected=0; results=[]; render(); requestAnimationFrame(()=>input.focus());
     statusEl.textContent=discovered.length ? 'Catalog ready' : 'Preparing catalog…';
     const session=catalogSession;
     setTimeout(()=>{

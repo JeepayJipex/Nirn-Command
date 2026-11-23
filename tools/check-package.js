@@ -16,7 +16,7 @@ for(let i=0;i<count;i++) {
   if(data.length!==archive.readUInt32LE(pos+24)) throw Error('Invalid entry size: '+name);
   entries.set(name,data); pos+=46+nameLength+extra+comment;
 }
-for(const name of ['NirnCommand.esp','Scripts/NirnCommand_PlayerAlias.pex','Scripts/NirnCommand_ConsoleAdapter.pex','Scripts/NirnCommand_SkyrimNetAdapter.pex','Scripts/NirnCommandNative.pex','SKSE/Plugins/NirnCommandNative.dll','Magelight/NirnCommand/views/palette/editor.js','SEQ/NirnCommand.seq','Magelight/NirnCommand/manifest.json','Magelight/NirnCommand/views/palette/index.html','Magelight/NirnCommand/views/palette/main.js','Magelight/NirnCommand/views/palette/commands.js','Magelight/NirnCommand/views/palette/user-commands.js','Magelight/NirnCommand/views/palette/scanned-commands.js']) if(!entries.has(name)) throw Error('Missing archive entry: '+name);
+for(const name of ['NirnCommand.esp','Scripts/NirnCommand_PlayerAlias.pex','Scripts/NirnCommand_ConsoleAdapter.pex','Scripts/NirnCommand_SkyrimNetAdapter.pex','Scripts/NirnCommandNative.pex','SKSE/Plugins/NirnCommandNative.dll','Magelight/NirnCommand/views/palette/editor.js','SEQ/NirnCommand.seq','Magelight/NirnCommand/manifest.json','Magelight/NirnCommand/views/palette/index.html','Magelight/NirnCommand/views/palette/search.js','Magelight/NirnCommand/views/palette/main.js','Magelight/NirnCommand/views/palette/commands.js','Magelight/NirnCommand/views/palette/user-commands.js','Magelight/NirnCommand/views/palette/scanned-commands.js']) if(!entries.has(name)) throw Error('Missing archive entry: '+name);
 const esp=entries.get('NirnCommand.esp'),pex=entries.get('Scripts/NirnCommand_PlayerAlias.pex'),seq=entries.get('SEQ/NirnCommand.seq');
 if(pex.length<100 || pex.readUInt32BE(0)!==0xfa57c0de || !pex.includes(Buffer.from('NirnCommand_PlayerAlias'))) throw Error('Invalid PEX');
 for(const name of ['NirnCommand_ConsoleAdapter','NirnCommand_SkyrimNetAdapter','NirnCommandNative']) {
@@ -30,8 +30,10 @@ if(pe+24>dll.length || dll.toString('ascii',pe,pe+4)!=='PE\0\0' || dll.readUInt1
 if(![...entries.keys()].some(name=>name.startsWith('licenses/') && name.endsWith('/copyright'))) throw Error('Native dependency licenses missing');
 const group=24+esp.readUInt32LE(4),quest=group+24;
 if(seq.length!==4 || seq.readUInt32LE(0)!==esp.readUInt32LE(quest+12)) throw Error('SEQ does not reference the ESP quest');
+const html=entries.get('Magelight/NirnCommand/views/palette/index.html').toString('utf8');
+if (!html.includes('src="./search.js"') || html.indexOf('src="./search.js"')>html.indexOf('src="./main.js"')) throw Error('Search module must load before palette');
 const manifest=JSON.parse(entries.get('Magelight/NirnCommand/manifest.json').toString('utf8'));
-if(manifest.version!=='0.4.0' || manifest.modId!=='NirnCommand' || manifest.views?.palette?.path!=='views/palette/index.html') throw Error('Invalid Magelight manifest');
+if(manifest.version!=='0.5.0' || manifest.modId!=='NirnCommand' || manifest.views?.palette?.path!=='views/palette/index.html') throw Error('Invalid Magelight manifest');
 for(const name of ['docs/providers.md','docs/provider-v1.schema.json','examples/example-provider.json']) if(!entries.has(name)) throw Error('Missing provider documentation: '+name);
 for(const name of ['docs/provider-v1.schema.json','examples/example-provider.json']) JSON.parse(entries.get(name).toString('utf8').replace(/^\uFEFF/,''));
 if([...entries.keys()].some(name=>name.startsWith('SKSE/Plugins/NirnCommand/Providers/'))) throw Error('Example provider must not be activated by default');
