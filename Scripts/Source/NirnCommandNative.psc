@@ -1,5 +1,6 @@
 Scriptname NirnCommandNative Hidden
 Function RefreshDiscovery() Global Native
+int Function DiscoveryRevision() Global Native
 int Function DiscoveryCount() Global Native
 string Function DiscoveryEntry(int index) Global Native
 int Function LoadCommands() Global Native

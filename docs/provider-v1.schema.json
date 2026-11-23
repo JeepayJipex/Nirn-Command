@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JeepayJipex/Nirn-Command/blob/main/docs/provider-v1.schema.json",
+  "title": "Nirn Command provider manifest v1",
+  "type": "object",
+  "required": ["schemaVersion", "provider", "commands"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "provider": {
+      "type": "object", "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "version": { "type": "string" }, "description": { "type": "string" }, "requires": { "$ref": "#/$defs/requires" }
+      }
+    },
+    "commands": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/command" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
+    "requires": { "type": "object", "required": ["plugins"], "properties": { "plugins": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\\\/:]+$" } } } },
+    "command": {
+      "type": "object", "required": ["id", "name", "action"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "keywords": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+        "requires": { "$ref": "#/$defs/requires" },
+        "action": { "oneOf": [
+          { "type": "object", "required": ["type", "command"], "properties": { "type": { "const": "console" }, "command": { "type": "string", "minLength": 1, "maxLength": 512 } } },
+          { "type": "object", "required": ["type", "key", "modifiers"], "properties": { "type": { "const": "shortcut" }, "key": { "type": "integer", "minimum": 1, "maximum": 255, "not": { "enum": [29, 42, 54, 56, 157, 184] } }, "modifiers": { "type": "integer", "minimum": 0, "maximum": 63 } } }
+        ] }
+      }
+    }
+  }
+}

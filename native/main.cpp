@@ -149,6 +149,7 @@ namespace {
     std::vector<std::string> discoveryEntries;
     std::vector<std::string> discoveryTransfer;
     std::atomic_bool discoveryRunning{false};
+    std::atomic<std::int32_t> discoveryRevision{0};
     void MarkBoundPapyrus(std::string& serialized)
     {
         auto entry=nlohmann::json::parse(serialized,nullptr,false);
@@ -189,6 +190,7 @@ namespace {
 
                     std::scoped_lock lock(discoveryMutex);
                     discoveryEntries = std::move(entries);
+                    ++discoveryRevision;
                 } catch (const std::exception& error) {
                     SKSE::log::error("Discovery failed: {}", error.what());
                 }
@@ -199,6 +201,7 @@ namespace {
             SKSE::log::error("Could not start discovery: {}", error.what());
         }
     }
+    std::int32_t DiscoveryRevision(RE::StaticFunctionTag*) { return discoveryRevision.load(); }
     std::int32_t DiscoveryCount(RE::StaticFunctionTag*)
     {
         std::scoped_lock lock(discoveryMutex);
@@ -219,7 +222,9 @@ namespace {
             auto handler = RE::TESDataHandler::GetSingleton();
             bool available = handler != nullptr;
             for (const auto& plugin : parsed["requiredPlugins"]) {
-                if (!plugin.is_string() || !handler || !handler->LookupModByName(plugin.get<std::string>())) {
+                if (!plugin.is_string() || !handler ||
+                    (!handler->LookupLoadedModByName(plugin.get<std::string>()) &&
+                     !handler->LookupLoadedLightModByName(plugin.get<std::string>()))) {
                     available = false;
                     break;
                 }
@@ -248,6 +253,7 @@ namespace {
         vm->RegisterFunction("AppendOverridesChunk", "NirnCommandNative", AppendOverridesChunk);
         vm->RegisterFunction("CommitOverridesWrite", "NirnCommandNative", CommitOverridesWrite);
         vm->RegisterFunction("RefreshDiscovery", "NirnCommandNative", RefreshDiscovery);
+        vm->RegisterFunction("DiscoveryRevision", "NirnCommandNative", DiscoveryRevision);
         vm->RegisterFunction("DiscoveryCount", "NirnCommandNative", DiscoveryCount);
         vm->RegisterFunction("DiscoveryEntry", "NirnCommandNative", DiscoveryEntry);
         return true;

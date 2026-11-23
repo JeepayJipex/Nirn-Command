@@ -114,3 +114,15 @@ assert.equal(options4.setHotkey(67,0,7),false);window4.ncHotkeyResult('99|ok');a
 window4.ncHotkeyResult('1|ok');assert.deepEqual(editor4.last,[true,7]);timers4.shift()();assert.equal(sent4.length,0);
 assert.equal(options4.setHotkey(68,0,8),true);sent4.shift();timers4.shift()();assert.deepEqual(editor4.last,['timeout',8]);assert.deepEqual(sent4.shift(),['execute','3|hotkey:get']);
 console.log('Hotkey routing, request correlation and timeout reconciliation checks passed.');
+// Fictional providers are independently searchable and honor saved overrides.
+window.ncOverridesBegin('1');window.ncOverridesChunk('0|'+JSON.stringify({version:1,overrides:{'provider:alpha:open':{action:'shortcut2:66:4'},'provider:beta:hidden':{hidden:true},'provider:removed:old':{hidden:true}}}));window.ncOverridesDone();
+window.ncCapabilities('1|1');window.ncDiscoveryBegin();
+window.ncDiscoveryEntry(JSON.stringify({id:'provider:alpha:open',label:'Alpha open',kind:'Mod',action:'shortcut2:37:0',requirementsMet:true}));
+window.ncDiscoveryEntry(JSON.stringify({id:'provider:beta:hidden',label:'Beta hidden',kind:'Mod',action:'console:tgm',requirementsMet:true}));
+window.ncDiscoveryEntry(JSON.stringify({id:'provider:beta:missing',label:'Beta missing',kind:'Mod',action:'console:tcl',requirementsMet:false}));
+window.ncDiscoveryComplete();search('Alpha open');key('Enter');assert.equal(sent.pop()[1].split('|')[1],'shortcut2:66:4');
+search('Beta hidden');assert.equal(results.children[0].textContent,'No results.');
+search('Beta missing');key('Enter');assert.equal(status.textContent,'Unavailable: required plugin not detected.');
+window.ncDiscoveryBegin();window.ncDiscoveryComplete();search('Alpha open');assert.equal(results.children[0].textContent,'No results.');
+window.ncDiscoveryBegin();window.ncDiscoveryEntry(JSON.stringify({id:'provider:alpha:open',label:'Alpha open',kind:'Mod',action:'shortcut2:37:0',requirementsMet:true}));window.ncDiscoveryComplete();search('Alpha open');key('Enter');assert.equal(sent.pop()[1].split('|')[1],'shortcut2:66:4');
+console.log('Provider overrides, missing requirements and removal/reinstallation passed.');

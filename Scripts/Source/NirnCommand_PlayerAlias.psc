@@ -8,6 +8,7 @@ bool _scanning
 bool _sending
 bool _discoverySending
 bool _discoveryRequested
+int _discoveryRevision
 bool _domReady
 bool _snapshotRequested
 bool _dirty
@@ -50,6 +51,7 @@ Function Setup()
     _uiEpoch = 0
     _snapshotRequested = false
     _discoveryRequested = false
+    _discoveryRevision = -1
     _catalogSession = ""
     _lastHandshake = 0.0
     RegisterForModEvent("Magelight_JS_catalog", "OnCatalog")
@@ -108,8 +110,14 @@ Event OnUpdate()
             if SKSE.GetPluginVersion("NirnCommandNative") >= 0
                 NirnCommandNative.RefreshDiscovery()
                 SendCapabilities()
-                SendDiscovery()
             endif
+        endif
+    endif
+    if _domReady && SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        int discoveryRevision = NirnCommandNative.DiscoveryRevision()
+        if discoveryRevision != _discoveryRevision
+            _discoveryRevision = discoveryRevision
+            SendDiscovery()
         endif
     endif
     RegisterForSingleUpdate(1.0)
@@ -546,6 +554,9 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         _fullScan = true
         _dirty = true
         _lastChange = 0.0
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+            NirnCommandNative.RefreshDiscovery()
+        endif
     elseif strArg != "snapshot|" + _catalogSession || _catalogSession == ""
         Debug.Trace("[NirnCommand] Catalog request rejected session mismatch")
         return
