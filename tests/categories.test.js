@@ -8,3 +8,12 @@ const key=(key,extra={})=>{let prevented=false;handlers.keydown({key,code:key,pr
 window.ncCatalogBegin('1');window.ncAddEntry('item|1:0|game:item:x:1|Iron Sword');window.ncAddEntry('spell|1:1|game:spell:x:2|Fast Healing');window.ncCatalogComplete('1');
 assert.equal(categories.children.length,4);assert.equal(categories.children[0].attrs['aria-pressed'],'true');assert.ok(key('Tab'));assert.equal(categories.children[1].attrs['aria-pressed'],'true');assert.ok(input.focused);key('Tab');assert.equal(categories.children[2].attrs['aria-pressed'],'true');assert.equal(results.children[0].children[1].children[0].textContent,'Iron Sword');key('Tab');assert.equal(results.children[0].children[1].children[0].textContent,'Fast Healing');key('Tab',{shiftKey:true});assert.equal(categories.children[2].attrs['aria-pressed'],'true');categories.children[1].listeners.click();assert.equal(categories.children[1].attrs['aria-pressed'],'true');
 console.log('Category clicks, cycling, focus and empty-query catalogs passed.');
+
+// Exercise actual text-node rendering, including a decomposed accent.
+document.createTextNode=text=>({textContent:text});
+window.ncCatalogBegin('2');window.ncAddEntry('item|2:0|game:item:x:3|E\u0301pee de fer');window.ncCatalogComplete('2');
+categories.children[2].listeners.click();input.value='epee';input.listeners.input();
+const label=results.children[0].children[1].children[0];
+assert.equal(label.children[0].textContent,'E\u0301pee');assert.equal(label.children[1].textContent,' de fer');
+input.value='zzz';input.listeners.input();assert.match(results.children[0].textContent,/No items/);
+console.log('Unicode highlighting and category-specific empty state passed.');

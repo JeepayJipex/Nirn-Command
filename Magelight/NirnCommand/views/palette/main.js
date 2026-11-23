@@ -212,7 +212,9 @@
     let normalized='', offsets=[];
     for(let pos=0;pos<text.length;) {
       const cp=String.fromCodePoint(text.codePointAt(pos)), start=pos; pos+=cp.length;
-      const folded=normalize(cp); for(let n=0;n<folded.length;n++){normalized+=folded[n];offsets.push([start,pos]);}
+      const folded=cp.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      if (!folded && offsets.length && /[\u0300-\u036f]/.test(cp)) offsets[offsets.length-1][1]=pos;
+      for(let n=0;n<folded.length;n++){normalized+=folded[n];offsets.push([start,pos]);}
     }
     const marked=new Array(text.length).fill(false);
     for(const term of terms){let at=0;while((at=normalized.indexOf(term,at))!==-1){const start=offsets[at][0],end=offsets[at+term.length-1][1];for(let i=start;i<end;i++)marked[i]=true;at+=term.length;}}
