@@ -1,4 +1,5 @@
 #include "world_runtime.h"
+#include "world.h"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <chrono>
@@ -62,16 +63,17 @@ public:
         if (!event || !event->mapMarkerData) return RE::BSEventNotifyControl::kContinue;
         auto player=RE::PlayerCharacter::GetSingleton();
         if (!player) return RE::BSEventNotifyControl::kContinue;
-        RE::FormID found=0; unsigned matches=0;
+        std::vector<std::uint32_t> matches;
         for (const auto& handle:player->GetPlayerRuntimeData().currentMapMarkers) {
             auto ref=handle.get();
             auto extra=ref ? ref->extraList.GetByType<RE::ExtraMapMarker>() : nullptr;
-            if (extra && extra->mapData==event->mapMarkerData) {found=ref->GetFormID(); ++matches;}
+            if (extra && extra->mapData==event->mapMarkerData) matches.push_back(ref->GetFormID());
         }
-        if (matches==1 && found) {
+        auto found=nirn::world::uniqueDiscoveredMarker(matches);
+        if (found) {
             std::scoped_lock lock(mutex);
-            if (discoveredLocations.insert(found).second) locationsDirty=true;
-        } else SKSE::log::warn("World location discovery unresolved matches={} world={}",matches,event->worldspaceID ? event->worldspaceID : "unknown");
+            if (discoveredLocations.insert(*found).second) locationsDirty=true;
+        } else SKSE::log::warn("World location discovery unresolved matches={} world={}",matches.size(),event->worldspaceID ? event->worldspaceID : "unknown");
         return RE::BSEventNotifyControl::kContinue;
     }
 };
@@ -167,9 +169,9 @@ void refresh(RE::StaticFunctionTag*)
             if (!valid(actor,player)) return RE::BSContainer::ForEachResult::kContinue;
             const char* name=actor->GetDisplayFullName();
             const float distance=actor->GetDistance(player);
-            if (!name || !*name || !std::isfinite(distance) || distance<0 || distance>radius()) return RE::BSContainer::ForEachResult::kContinue;
             auto handle=actor->GetHandle(); const auto token=handle.native_handle();
-            if (!token) return RE::BSContainer::ForEachResult::kContinue;
+            nirn::world::ActorCandidate candidate{token,name ? name : "",distance,true,true,true,true,false,true};
+            if (!nirn::world::eligible(candidate,radius())) return RE::BSContainer::ForEachResult::kContinue;
             const auto signedToken=static_cast<std::int32_t>(token);
             nlohmann::json row={{"id","npc:"+std::to_string(signedToken)},{"token",std::to_string(signedToken)},
                 {"label",name},{"distance",distance},{"detail",detail(actor,player,distance)}};

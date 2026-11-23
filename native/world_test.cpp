@@ -15,5 +15,8 @@ int main()
     if (actors.size() != 2 || actors[0].identity != 2 || actors[1].identity != 1) throw std::runtime_error("filter, ordering or identity failed");
     if (nearby({a,b},100,1).front().identity != 2) throw std::runtime_error("limit failed");
     if (!nearby({a},10).empty()) throw std::runtime_error("radius failed");
+    if (uniqueDiscoveredMarker({}).has_value()) throw std::runtime_error("unobserved marker leaked");
+    if (uniqueDiscoveredMarker({10,11}).has_value()) throw std::runtime_error("ambiguous discovery accepted");
+    if (uniqueDiscoveredMarker({0,10,10}) != 10) throw std::runtime_error("duplicate handles lost discovery");
 }
 
