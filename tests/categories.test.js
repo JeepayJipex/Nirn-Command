@@ -28,27 +28,28 @@ window.ncCatalogBegin('5');window.ncAddEntry('item|5:0|game:item:x:11|Iron Shiel
 console.log('Keyboard selection survives catalog updates and resets after removal.');
 
 window.ncGameLoaded('save-one'); window.ncWorldContext('save-one|1');
-window.ncWorldBegin('save-one|1|npc|1|2');
-window.ncWorldEntry('save-one|1|npc|1|0|'+JSON.stringify({id:'npc:1',token:'1',label:'Guard',distance:50,detail:'50 units · ahead'}));
-window.ncWorldEntry('save-one|1|npc|1|1|'+JSON.stringify({id:'npc:2',token:'2',label:'Guard',distance:25,detail:'25 units · left'}));
-window.ncWorldComplete('save-one|1|npc|1');
+window.ncWorldBegin('save-one|1|npc|1|1|2');
+window.ncWorldEntry('save-one|1|npc|1|1|0|'+JSON.stringify({id:'npc:1',token:'1',label:'Guard',distance:50,detail:'50 units · ahead'}));
+window.ncWorldEntry('save-one|1|npc|1|1|1|'+JSON.stringify({id:'npc:2',token:'2',label:'Guard',distance:25,detail:'25 units · left'}));
+window.ncWorldComplete('save-one|1|npc|1|1');
 categories.children[4].listeners.click(); input.value=''; input.listeners.input();
 assert.equal(results.children.length,2); assert.equal(results.children[0].children[1].children[1].textContent,'25 units · left');
 key('Enter'); assert.equal(results.children[0].textContent,'Guard');
 window.ncWorldInspect('save-one|1|npc|2|'+JSON.stringify({available:false}));
 assert.match(results.children[1].textContent,/unavailable/);
 assert.ok(key('Escape')); assert.equal(categories.children[4].attrs['aria-pressed'],'true'); assert.ok(input.focused);
-window.ncGameLoaded('save-two'); window.ncWorldComplete('save-one|1|npc|1');
+window.ncGameLoaded('save-two'); window.ncWorldComplete('save-one|1|npc|1|1');
 categories.children[4].listeners.click(); assert.match(results.children[0].textContent,/No npcs/);
 window.ncWorldContext('save-two|2');
 window.ncWorldContext('save-two|1');
-window.ncWorldBegin('save-two|2|location|1|1');
-window.ncWorldEntry('save-two|2|location|1|0|'+JSON.stringify({id:'location:9',token:'9',label:'Whiterun',detail:'Skyrim'}));
-window.ncWorldComplete('save-two|2|location|1');
+window.ncWorldBegin('save-two|2|location|1|1|1');
+window.ncWorldEntry('save-two|2|location|1|1|0|'+JSON.stringify({id:'location:9',token:'9',label:'Whiterun',detail:'Skyrim'}));
+window.ncWorldComplete('save-two|2|location|1|1');
 categories.children[5].listeners.click(); input.value='white'; input.listeners.input();
 assert.equal(results.children.length,1); key('Enter'); assert.equal(results.children.length,3);
 window.ncWorldInspect('save-one|2|location|9|'+JSON.stringify({available:true})); assert.equal(results.children.length,3);
 window.ncWorldInspect('save-two|2|location|9|'+JSON.stringify({available:true,detail:'Skyrim'})); assert.equal(results.children.length,4);
 key('Escape'); assert.equal(categories.children[5].attrs['aria-pressed'],'true');
 console.log('World categories, details, unavailable references and save isolation passed.');
+
 

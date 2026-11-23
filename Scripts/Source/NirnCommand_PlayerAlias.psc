@@ -37,6 +37,11 @@ int _worldContext
 int _worldRevision
 int _locationRevision
 bool _worldSending
+int _worldAttempt
+int _npcAttempt
+int _locationAttempt
+float _npcSentAt
+float _locationSentAt
 
 Event OnInit()
     Setup()
@@ -62,6 +67,8 @@ Function Setup()
     _locationRevision = 0
     _worldSending = false
     _lastWorldRefresh = 0.0
+    _npcSentAt = 0.0
+    _locationSentAt = 0.0
     _viewGeneration += 1
     _viewId = 0
     _domReady = false
@@ -590,7 +597,7 @@ Function PublishWorldNPCs()
         _locationRevision = 0
         Magelight.Call(view, "ncWorldContext", session + "|" + context)
     endif
-    if revision == _worldRevision
+    if revision == _worldRevision || Utility.GetCurrentRealTime() - _npcSentAt < 5.0
         return
     endif
     _worldSending = true
@@ -599,7 +606,10 @@ Function PublishWorldNPCs()
         _worldSending = false
         return
     endif
-    string prefix = session + "|" + context + "|npc|" + revision + "|"
+    _worldAttempt += 1
+    int attempt = _worldAttempt
+    _npcAttempt = attempt
+    string prefix = session + "|" + context + "|npc|" + revision + "|" + attempt + "|"
     Magelight.Call(view, "ncWorldBegin", prefix + total)
     int i = 0
     while i < total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.WorldRevision()
@@ -616,8 +626,8 @@ Function PublishWorldNPCs()
         endif
     endwhile
     if i == total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.WorldRevision()
-        Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|npc|" + revision)
-        _worldRevision = revision
+        Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|npc|" + revision + "|" + attempt)
+        _npcSentAt = Utility.GetCurrentRealTime()
         Debug.Trace("[NirnCommand] World NPC published context=" + context + " revision=" + revision + " entries=" + total)
     endif
     _worldSending = false
@@ -626,7 +636,7 @@ EndFunction
 Function PublishWorldLocations()
     int context = NirnCommandNative.WorldContext()
     int revision = NirnCommandNative.LocationRevision()
-    if context < 1 || context != _worldContext || revision < 1 || revision == _locationRevision || _worldSending
+    if context < 1 || context != _worldContext || revision < 1 || revision == _locationRevision || _worldSending || Utility.GetCurrentRealTime() - _locationSentAt < 5.0
         return
     endif
     _worldSending = true
@@ -638,7 +648,10 @@ Function PublishWorldLocations()
         _worldSending = false
         return
     endif
-    string prefix = session + "|" + context + "|location|" + revision + "|"
+    _worldAttempt += 1
+    int attempt = _worldAttempt
+    _locationAttempt = attempt
+    string prefix = session + "|" + context + "|location|" + revision + "|" + attempt + "|"
     Magelight.Call(view, "ncWorldBegin", prefix + total)
     int i = 0
     while i < total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.LocationRevision()
@@ -655,8 +668,8 @@ Function PublishWorldLocations()
         endif
     endwhile
     if i == total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.LocationRevision()
-        Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|location|" + revision)
-        _locationRevision = revision
+        Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|location|" + revision + "|" + attempt)
+        _locationSentAt = Utility.GetCurrentRealTime()
         Debug.Trace("[NirnCommand] World locations published context=" + context + " revision=" + revision + " entries=" + total)
     endif
     _worldSending = false
@@ -664,6 +677,15 @@ EndFunction
 
 Event OnWorld(string eventName, string payload, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
+        return
+    endif
+    string npcAck = "applied|" + _catalogSession + "|" + _worldContext + "|npc|" + NirnCommandNative.WorldRevision() + "|" + _npcAttempt
+    string locationAck = "applied|" + _catalogSession + "|" + _worldContext + "|location|" + NirnCommandNative.LocationRevision() + "|" + _locationAttempt
+    if payload == npcAck && _npcAttempt > 0
+        _worldRevision = NirnCommandNative.WorldRevision()
+        return
+    elseif payload == locationAck && _locationAttempt > 0
+        _locationRevision = NirnCommandNative.LocationRevision()
         return
     endif
     string mapPrefix = "map|" + _catalogSession + "|" + _worldContext + "|"

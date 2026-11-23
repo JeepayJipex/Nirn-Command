@@ -334,23 +334,25 @@
     worldContext=context; worldNpcs=[]; worldLocations=[]; worldDetail=null; worldCatalog.reset(session,context); render();
   };
   window.ncWorldBegin = function(payload) {
-    const [session,context,kind,generation,count]=String(payload).split('|');
-    worldCatalog?.begin(session,context,kind,Number(generation),Number(count));
+    const [session,context,kind,generation,attempt,count]=String(payload).split('|');
+    const state=worldCatalog?.begin(session,context,kind,Number(generation),Number(count),Number(attempt));
+    if(state==='applied' && bridge) bridge.send('world',`applied|${session}|${context}|${kind}|${generation}|${attempt}`);
   };
   window.ncWorldEntry = function(payload) {
     try {
-      const [session,context,kind,generation,index,...rest]=String(payload).split('|');
+      const [session,context,kind,generation,attempt,index,...rest]=String(payload).split('|');
       const row=JSON.parse(rest.join('|'));
       if(!/^-?[0-9]+$/.test(String(row.token)) || !Number.isFinite(row.distance) && kind==='npc') return;
-      worldCatalog?.append(session,context,kind,Number(generation),Number(index),row);
+      worldCatalog?.append(session,context,kind,Number(generation),Number(index),row,Number(attempt));
     } catch (_) {}
   };
   window.ncWorldComplete = function(payload) {
-    const [session,context,kind,generation]=String(payload).split('|');
-    if(!worldCatalog?.complete(session,context,kind,Number(generation))) return;
+    const [session,context,kind,generation,attempt]=String(payload).split('|');
+    if(!worldCatalog?.complete(session,context,kind,Number(generation),Number(attempt))) return;
     const entries=worldCatalog.entries(kind).map(row=>({...row,kind:kind==='npc'?'NPC':'Location',action:`world:${row.token}`,transient:true}));
     if(kind==='npc') worldNpcs=entries; else worldLocations=entries;
     render();
+    if(bridge) bridge.send('world',`applied|${session}|${context}|${kind}|${generation}|${attempt}`);
   };
   window.ncWorldInspect = function(payload) {
     try {

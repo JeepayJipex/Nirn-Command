@@ -10,7 +10,17 @@ Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with
 
 The DLL is built for Skyrim SE 1.5.97 and AE 1.6.1170, not VR. Use matching versions of every dependency. Automated builds do not establish that this release works in a Skyrim session; runtime behavior remains unverified until played.
 
-Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Items and Spells. Search ignores accents and capitalization, accepts partial words in any order, and tolerates small typing errors.
+Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Items, Spells, NPCs and Locations. Search ignores accents and capitalization, accepts partial words in any order, and tolerates small typing errors.
+
+## World search review
+
+The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Select one to inspect its approximate distance, direction and available location. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
+
+The Locations category is deliberately restricted to discoveries observed after installing this version and successfully correlated to a marker reference. It does not infer discovery from a visible map marker or fast-travel availability. It stores confirmed references in the character's SKSE co-save and rechecks them after loading. Older discoveries are not imported. Correlation without opening the map, including on Solstheim and in mod-added worldspaces, needs in-game verification. If the engine's marker list does not contain a discovered marker at the event, that location is omitted and the native log records an unresolved event.
+
+Select a location to inspect its available worldspace. **Open general map** releases Nirn Command's pause and requests the normal map; it does not center the marker or start fast travel. World entries are not persisted as favorites or history.
+
+For an in-game review, check: a named Whiterun NPC and its detail view; movement to another cell; loading another save; a newly discovered marker before opening the map; the absence of an undiscovered marker; Solstheim and a mod-added marker; and the map action, shortcut-only opening, pause, items and spells. Include `NirnCommandNative.log`, Papyrus and Magelight logs with the results. Compilation and automated tests do not verify these Skyrim runtime behaviors.
 
 ## Actions and discovery
 
@@ -51,3 +61,4 @@ Run `node tests/performance.js` for synthetic index and search timings. To measu
 ```
 
 The browser benchmark uses the real palette and synthetic catalogs, runs 10 warmups and 30 measured queries per size, and forces layout after each input. It does not measure painting, Skyrim, Magelight, or input-to-display latency in game.
+
