@@ -96,7 +96,7 @@
     setCommands:value=>{commands=validCommands([...commands.filter(entry=>!supportedUserCommand(entry)),...value]);commandsDirty=true;render();flushCommands();},
     getProviders:()=>modDiscovered.filter(entry=>entry.id.startsWith('provider:')),
     getOverride:id=>overrides[id] || {},
-    setOverride:(id,value)=>{if(!overridesReady)return false;if(value) overrides[id]=value;else delete overrides[id];overridesDirty=true;render();flushOverrides();return true;},
+    setOverride:(id,value)=>{if(!overridesReady)return false;overrides={...overrides};if(value) overrides[id]=value;else delete overrides[id];overridesDirty=true;render();flushOverrides();return true;},
     getHotkey:()=>openingHotkey,
     setHotkey:(key,mask,session)=>{
       if(!bridge) {statusEl.textContent='Shortcut bridge unavailable'; return false;}
@@ -184,14 +184,18 @@
     if (hay.includes(query)) return 400;
     return query.split(/\s+/).every(t => hay.includes(t)) ? 200 : -1;
   }
+  let indexedDiscovery=null, indexedOverrides=null, effectiveDiscovery=[];
   function getResults() {
     const q = input.value, query = normalize(q);
     if (q.trimStart().startsWith('>')) {
       const pos = q.indexOf('>'), raw = q.slice(pos + 1);
       return raw.trim() ? [{ id:'direct:' + raw, label:'Run: ' + raw, detail:'Console command', kind:'Console', action:'console:' + raw, transient:true }] : [];
     }
-    const providersApplied=modDiscovered.filter(entry=>!overrides[entry.id]?.hidden).map(entry=>{const override=overrides[entry.id];return entry.id.startsWith('provider:') && entry.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(override?.action || '') ? {...entry,action:override.action} : entry;});
-    const entries = statics.concat(commands.filter(supportedUserCommand), providersApplied, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
+    if(indexedDiscovery!==modDiscovered || indexedOverrides!==overrides) {
+      indexedDiscovery=modDiscovered; indexedOverrides=overrides;
+      effectiveDiscovery=modDiscovered.filter(entry=>!overrides[entry.id]?.hidden).map(entry=>{const override=overrides[entry.id];return entry.id.startsWith('provider:') && entry.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(override?.action || '') ? {...entry,action:override.action} : entry;});
+    }
+    const entries = statics.concat(commands.filter(supportedUserCommand), effectiveDiscovery, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
     if (!query) {
       const byId = new Map(entries.map(e => [e.id, e]));
       const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...commands.map(e => e.id)];
