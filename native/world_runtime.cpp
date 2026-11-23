@@ -35,7 +35,9 @@ std::string locationRow(RE::TESObjectREFR* ref)
     std::string place=worldName && *worldName ? worldName : "Worldspace unavailable";
     auto token=static_cast<std::int32_t>(ref->GetFormID());
     nlohmann::json row={{"id","location:"+std::to_string(token)},{"token",std::to_string(token)},{"label",name},{"detail",place}};
-    return row.dump(-1,' ',false,nlohmann::json::error_handler_t::replace);
+    auto serialized=row.dump(-1,' ',false,nlohmann::json::error_handler_t::replace);
+    if (serialized.size()>800) {SKSE::log::warn("World location omitted: encoded row too long form={:08X}",ref->GetFormID()); return {};}
+    return serialized;
 }
 
 void updateLocations(std::uint64_t request)
@@ -169,7 +171,9 @@ void refresh(RE::StaticFunctionTag*)
             const auto signedToken=static_cast<std::int32_t>(token);
             nlohmann::json row={{"id","npc:"+std::to_string(signedToken)},{"token",std::to_string(signedToken)},
                 {"label",name},{"distance",distance},{"detail",detail(actor,player,distance)}};
-            found.push_back({distance,token,row.dump(-1,' ',false,nlohmann::json::error_handler_t::replace),handle});
+            auto serialized=row.dump(-1,' ',false,nlohmann::json::error_handler_t::replace);
+            if (serialized.size()>800) {SKSE::log::warn("World NPC omitted: encoded row too long form={:08X}",actor->GetFormID()); return RE::BSContainer::ForEachResult::kContinue;}
+            found.push_back({distance,token,std::move(serialized),handle});
             return RE::BSContainer::ForEachResult::kContinue;
         });
         std::sort(found.begin(),found.end(),[](const auto& a,const auto& b){return a.distance!=b.distance ? a.distance<b.distance : a.token<b.token;});
