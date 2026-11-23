@@ -126,3 +126,15 @@ search('Beta missing');key('Enter');assert.equal(status.textContent,'Unavailable
 window.ncDiscoveryBegin();window.ncDiscoveryComplete();search('Alpha open');assert.equal(results.children[0].textContent,'No results.');
 window.ncDiscoveryBegin();window.ncDiscoveryEntry(JSON.stringify({id:'provider:alpha:open',label:'Alpha open',kind:'Mod',action:'shortcut2:37:0',requirementsMet:true}));window.ncDiscoveryComplete();search('Alpha open');key('Enter');assert.equal(sent.pop()[1].split('|')[1],'shortcut2:66:4');
 console.log('Provider overrides, missing requirements and removal/reinstallation passed.');
+// Override transaction sends UTF-8-safe chunks and waits for each acknowledgement.
+window4.ncOverridesBegin('-1');window4.ncOverridesDone();
+assert.equal(options4.setOverride('provider:alpha:open',{hidden:true,action:'shortcut2:37:4'}),true);
+let overrideText='',overrideOps=[];
+while(sent4.length) {
+  const [channel,payload]=sent4.shift(); assert.equal(channel,'overrides');
+  const first=payload.indexOf('|'),second=payload.indexOf('|',first+1),op=payload.slice(0,first),request=second<0?payload.slice(first+1):payload.slice(first+1,second);
+  overrideOps.push(op); if(op==='write') {const part=payload.slice(second+1);assert.ok(Buffer.byteLength(part,'utf8')<=400);overrideText+=part;}
+  window4.ncOverridesAck(request+'|ok');
+}
+assert.equal(overrideOps[0],'begin');assert.equal(overrideOps.at(-1),'commit');assert.equal(JSON.parse(overrideText).overrides['provider:alpha:open'].hidden,true);
+console.log('Override storage transaction and acknowledgements passed.');
