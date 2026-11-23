@@ -16,14 +16,19 @@ int main() {
         write(dir,"one.json",R"({"schemaVersion":1,"provider":{"id":"alpha","name":"Alpha","requires":{"plugins":["Alpha.esp"]}},"commands":[{"id":"open","name":"Open","action":{"type":"shortcut","key":37,"modifiers":4}},{"id":"bad","name":"Bad","action":{"type":123}},{"id":"console","name":"Éclair","keywords":["magic"],"action":{"type":"console","command":"tgm"}}]})");
         write(dir,"two.json",R"({"schemaVersion":1,"provider":{"id":"beta","name":"Beta"},"commands":[{"id":"open","name":"Other","action":{"type":"console","command":"tcl"}}]})");
         write(dir,"invalid.json","{broken");
-        auto entries=nirn::discover_providers(root);
+        std::vector<std::string> diagnostics;
+        auto entries=nirn::discover_providers(root,&diagnostics);
         require(entries.size()==3,"independent providers or per-command recovery failed");
+        require(!diagnostics.empty(),"invalid provider did not produce a diagnostic");
         bool found=false;
         for (const auto& row : entries) { auto e=nlohmann::json::parse(row); if(e["id"]=="provider:alpha:open") {found=true; require(e["action"]=="shortcut2:37:4" && e["requiredPlugins"][0]=="Alpha.esp","shortcut or requirements lost");} }
         require(found,"missing alpha command");
         write(dir,"duplicate.json",R"({"schemaVersion":1,"provider":{"id":"alpha","name":"Copy"},"commands":[{"id":"open","name":"Duplicate","action":{"type":"console","command":"tgm"}}]})");
-        entries=nirn::discover_providers(root);
+        diagnostics.clear();
+        entries=nirn::discover_providers(root,&diagnostics);
         require(entries.size()==2,"ambiguous IDs must be rejected");
+        bool duplicate=false; for(const auto& message:diagnostics) if(message.find("provider:alpha:open")!=std::string::npos) duplicate=true;
+        require(duplicate,"ambiguous ID diagnostic missing");
         fs::remove_all(root);
         std::cout << "Provider isolation, invalid commands, dependencies and duplicate IDs passed\n";
         return 0;

@@ -31,7 +31,7 @@ bool requirements(const json& owner, json& result) {
     return true;
 }
 }
-std::vector<std::string> discover_providers(const std::filesystem::path& data) {
+std::vector<std::string> discover_providers(const std::filesystem::path& data, std::vector<std::string>* diagnostics) {
     std::vector<std::filesystem::path> files;
     std::unordered_map<std::string, std::vector<std::string>> commands;
     std::size_t total = 0, count = 0;
@@ -42,21 +42,21 @@ std::vector<std::string> discover_providers(const std::filesystem::path& data) {
             if (entry.is_regular_file() && entry.path().extension() == ".json") files.push_back(entry.path());
         }
         std::sort(files.begin(), files.end());
-        if (files.size() > 128) files.resize(128);
+        if (files.size() > 128) { if (diagnostics) diagnostics->push_back("Provider file limit exceeded"); files.resize(128); }
         for (const auto& file : files) {
             try {
                 const auto size = std::filesystem::file_size(file);
-                if (size > 256 * 1024 || total + size > 2 * 1024 * 1024) continue;
+                if (size > 256 * 1024 || total + size > 2 * 1024 * 1024) { if (diagnostics) diagnostics->push_back("Provider file or scan byte limit exceeded: " + file.filename().string()); continue; }
                 total += size;
                 std::ifstream input(file, std::ios::binary);
                 auto root = json::parse(input, nullptr, false);
-                if (!root.is_object() || root.value("schemaVersion", 0) != 1 || !root.contains("provider") || !root["provider"].is_object() || !root.contains("commands") || !root["commands"].is_array()) continue;
+                if (!root.is_object() || root.value("schemaVersion", 0) != 1 || !root.contains("provider") || !root["provider"].is_object() || !root.contains("commands") || !root["commands"].is_array()) { if (diagnostics) diagnostics->push_back("Invalid or unsupported provider: " + file.filename().string()); continue; }
                 const auto& provider = root["provider"];
                 if (!identifier(provider.value("id", json{})) || !text(provider.value("name", json{}), 160)) continue;
                 json baseRequirements = json::array();
                 if (!requirements(provider, baseRequirements)) continue;
                 for (const auto& cmd : root["commands"]) {
-                    if (++count > 2048) break;
+                    if (++count > 2048) { if (diagnostics && count == 2049) diagnostics->push_back("Provider command limit exceeded"); break; }
                     try {
                     if (!cmd.is_object() || !identifier(cmd.value("id", json{})) || !text(cmd.value("name", json{}), 160) || !cmd.contains("action") || !cmd["action"].is_object()) continue;
                     auto deps = baseRequirements;
@@ -83,11 +83,14 @@ std::vector<std::string> discover_providers(const std::filesystem::path& data) {
                     commands[id].push_back(std::move(serialized));
                     } catch (const std::exception&) { continue; }
                 }
-            } catch (const std::exception&) { continue; }
+            } catch (const std::exception& error) { if (diagnostics) diagnostics->push_back("Provider read failed: " + file.filename().string() + ": " + error.what()); continue; }
         }
     } catch (const std::exception&) { return {}; }
     std::vector<std::string> result;
-    for (const auto& [id, values] : commands) if (values.size() == 1) result.push_back(values.front());
+    for (const auto& [id, values] : commands) {
+        if (values.size() == 1) result.push_back(values.front());
+        else if (diagnostics) diagnostics->push_back("Ambiguous provider command ID: " + id);
+    }
     std::sort(result.begin(), result.end());
     return result;
 }

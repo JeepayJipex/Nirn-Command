@@ -185,7 +185,9 @@ namespace {
             std::thread([] {
                 try {
                     auto entries = nirn::discover_mcm(dataDirectory);
-                    auto providers = nirn::discover_providers(dataDirectory);
+                    std::vector<std::string> diagnostics;
+                    auto providers = nirn::discover_providers(dataDirectory, &diagnostics);
+                    for (const auto& diagnostic : diagnostics) SKSE::log::warn("{}", diagnostic);
                     entries.insert(entries.end(), providers.begin(), providers.end());
 
                     std::scoped_lock lock(discoveryMutex);
