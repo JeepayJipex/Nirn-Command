@@ -84,7 +84,9 @@ void save(SKSE::SerializationInterface* intfc)
 }
 void revert(SKSE::SerializationInterface*)
 {
+    ++session;
     std::scoped_lock lock(mutex);
+    currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
     discoveredLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
 }
 void load(SKSE::SerializationInterface* intfc)
