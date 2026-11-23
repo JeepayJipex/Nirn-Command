@@ -1152,8 +1152,14 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     if epoch == _previousEpoch
         targetSlot = _previousSlot
     endif
-    Form target = Game.GetForm(token)
-    if !target || StorageUtil.FormListFind(player, "NirnCommand.Forms" + targetSlot, target) < 0
+    ; SKSE handles the full unsigned FormID range, including high load-order and ESL forms.
+    Form target = Game.GetFormEx(token)
+    if !target
+        Debug.Trace("[NirnCommand] Catalog form lookup failed request=" + request + " epoch=" + epoch + " formId=" + token)
+        ReportAction(request, "unavailable")
+        return
+    elseif StorageUtil.FormListFind(player, "NirnCommand.Forms" + targetSlot, target) < 0
+        Debug.Trace("[NirnCommand] Catalog form absent request=" + request + " epoch=" + epoch + " formId=" + token)
         ReportAction(request, "unavailable")
         return
     endif
