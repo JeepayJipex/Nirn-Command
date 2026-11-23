@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(NirnCommandNative VERSION 0.3.2 LANGUAGES CXX)
+project(NirnCommandNative VERSION 0.4.0 LANGUAGES CXX)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 find_package(directxtk CONFIG REQUIRED)
 find_package(CommonLibSSE CONFIG REQUIRED)

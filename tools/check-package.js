@@ -32,4 +32,7 @@ const group=24+esp.readUInt32LE(4),quest=group+24;
 if(seq.length!==4 || seq.readUInt32LE(0)!==esp.readUInt32LE(quest+12)) throw Error('SEQ does not reference the ESP quest');
 const manifest=JSON.parse(entries.get('Magelight/NirnCommand/manifest.json').toString('utf8'));
 if(manifest.version!=='0.4.0' || manifest.modId!=='NirnCommand' || manifest.views?.palette?.path!=='views/palette/index.html') throw Error('Invalid Magelight manifest');
+for(const name of ['docs/providers.md','docs/provider-v1.schema.json','examples/example-provider.json']) if(!entries.has(name)) throw Error('Missing provider documentation: '+name);
+for(const name of ['docs/provider-v1.schema.json','examples/example-provider.json']) JSON.parse(entries.get(name).toString('utf8').replace(/^\uFEFF/,''));
+if([...entries.keys()].some(name=>name.startsWith('SKSE/Plugins/NirnCommand/Providers/'))) throw Error('Example provider must not be activated by default');
 console.log(`Archive has ${entries.size} entries; ESP, PEX, x64 DLL, SEQ, licenses and Magelight paths passed inspection.`);
