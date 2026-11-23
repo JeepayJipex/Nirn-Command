@@ -191,7 +191,12 @@
       searchIndex.replace('providers',effectiveDiscovery);
     }
   }
-  function setCategory(next){category=next;selected=0;results=[];render();input.focus();}
+  function dismissWorldDetail() {
+    if (!worldDetail) return;
+    worldDetail=null;
+    if(bridge) bridge.send('__escapecapture','0');
+  }
+  function setCategory(next){dismissWorldDetail();category=next;selected=0;results=[];render();input.focus();}
   const categoryEl=document.querySelector('#categories');
   if(categoryEl) categories.forEach(name=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('mousedown',event=>event.preventDefault());button.addEventListener('click',()=>setCategory(name));categoryEl.appendChild(button);});
   function getResults() {
@@ -257,8 +262,7 @@
     favorites = favorites.includes(entry.id) ? favorites.filter(id => id !== entry.id) : [entry.id,...favorites]; save('favorites',favorites); render();
   }
   function backFromWorldDetail() {
-    worldDetail=null;
-    if(bridge) bridge.send('__escapecapture','0');
+    dismissWorldDetail();
     render(); input.focus();
   }
   function renderWorldDetail() {
@@ -460,15 +464,18 @@
     incoming.push({id:id || `session:${type}:${token}`, persistent:!!id, label:name, kind:type==='item'?'Item':'Spell',detail:type==='item'?'Inventory · equip or consume':'Known spell · right hand',action:`${type}:${token}`});
     if (!queued) { queued=true; requestAnimationFrame(()=>{queued=false; statusEl.textContent=`Loading ${incoming.length} entries`;}); }
   };
-  input.addEventListener('input',()=>{selected=0;results=[];render();});
+  input.addEventListener('input',()=>{dismissWorldDetail();selected=0;results=[];render();});
   let heldModifiers=0;
   const modifierBits={ShiftLeft:1,ShiftRight:2,ControlLeft:4,ControlRight:8,AltLeft:16,AltRight:32};
   document.addEventListener('keydown',event=>{
     if (editor?.isOpen()) { editor.keydown(event); return; }
-    if (worldDetail) { if(event.key==='Escape' || event.key==='Backspace') {event.preventDefault();backFromWorldDetail();} return; }
     if (event.isComposing || event.keyCode===229) return;
     if (modifierBits[event.code]) heldModifiers |= modifierBits[event.code];
     if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('execute',`${++serial}|hotkey:close`); return;}
+    if (worldDetail) {
+      if(event.key==='Escape') {event.preventDefault();backFromWorldDetail(); return;}
+      if(event.key!=='Tab' || event.ctrlKey || event.altKey || event.metaKey) return;
+    }
     if(event.key==='Tab' && !event.ctrlKey && !event.altKey && !event.metaKey){event.preventDefault();setCategory(categories[(categories.indexOf(category)+(event.shiftKey?-1:1)+categories.length)%categories.length]);}
     else if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
     else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
