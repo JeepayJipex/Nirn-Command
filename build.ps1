@@ -4,6 +4,8 @@ Set-Location $PSScriptRoot
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 & node (Join-Path $PSScriptRoot 'tests/search.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Search tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/heartbeat.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Heartbeat tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/categories.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Category tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/palette.test.js')

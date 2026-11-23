@@ -11,6 +11,7 @@ jobs:
       - name: Test palette and editor
         run: |
           node tests/search.test.js
+          node tests/heartbeat.test.js
           node tests/categories.test.js
           node tests/palette.test.js
           node tests/editor.test.js

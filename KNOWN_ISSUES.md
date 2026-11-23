@@ -9,3 +9,7 @@
 
 - Version 0.5.0 has automated checks only. Runtime timing, MO2 virtual filesystem behavior, spell availability and hotkey persistence need observation in a game session.
 - Catalog and transfer timings are logged in Papyrus and Magelight. They are not measurements of the prior build or proof of a particular speedup.
+
+## v0.5A review build
+
+Search includes bounded typo-tolerant word-prefix matching. Nirn Command requests a paused Magelight UI mode; while open, a session-scoped heartbeat services pending catalog work. On game load, Nirn Command closes its own UI mode and ignores hotkey events when the physical key is not pressed. Opening or closing the palette, pause recovery, and catalog progress while paused require in-game verification; synthetic tests do not reproduce Skyrim's Papyrus scheduler or saved event stacks.

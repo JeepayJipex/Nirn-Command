@@ -8,7 +8,7 @@ const stats=values=>{values.sort((a,b)=>a-b);return {median:+values[Math.floor(v
 frame.addEventListener('load',()=>{
  try {
   const w=frame.contentWindow,doc=frame.contentDocument,input=doc.querySelector('#query');
-  const queries=['Steel Sword 17','steel sw','heal fast','firebal','zzzzzzzz'],outputs=[];
+  const queries=['Steel Sword 17','steel sw','heal fast','firebal','flom','fam','zzzzzzzz'],outputs=[];
   for(const count of [1000,10000,50000]) {
    const rows=Array.from({length:count},(_,i)=>[i%2?'item':'spell',''+count+':'+i,'game:synthetic:fixture:'+i,['Iron','Steel','Ebony','Silver'][i%4]+' '+['Sword','Shield','Healing','Fireball'][Math.floor(i/4)%4]+' '+i]);
    const start=performance.now();w.ncCatalogBegin(''+count);for(const row of rows)w.ncAddEntry(row.join('|'));w.ncCatalogComplete(''+count);const catalogMs=performance.now()-start;

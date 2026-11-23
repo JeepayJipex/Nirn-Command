@@ -4,7 +4,7 @@ console.log(JSON.stringify({node:process.version,platform:process.platform,arch:
 for(const count of [1000,10000,50000]) {
  const data=Array.from({length:count},(_,i)=>({id:'synthetic:'+i,label:['Iron','Steel','Ebony','Silver'][i%4]+' '+['Sword','Shield','Healing','Fireball'][Math.floor(i/4)%4]+' '+i,kind:i%2?'Item':'Spell',keywords:'synthetic fixture'}));
  const index=search.create();let start=performance.now();index.replace('catalog',data);const indexMs=performance.now()-start;
- const queries=['Steel Sword 17','steel sw','heal fast','firebal','zzzzzzzz'],times=[],renderTimes=[];
+ const queries=['Steel Sword 17','steel sw','heal fast','firebal','flom','fam','zzzzzzzz'],times=[],renderTimes=[];
  for(let i=0;i<40;i++){start=performance.now();index.search(queries[i%queries.length]);const elapsed=performance.now()-start;if(i>=10)times.push(elapsed); start=performance.now(); const rows=index.search(queries[i%queries.length]).map(entry=>({label:entry.label,kind:entry.kind,detail:entry.detail||''})); if(rows.length>30)throw Error('Too many rows'); if(i>=10)renderTimes.push(performance.now()-start)}
  start=performance.now();index.replace('catalog',data);const updateMs=performance.now()-start;
  console.log(JSON.stringify({count,indexMs:+indexMs.toFixed(3),updateMs:+updateMs.toFixed(3),search:stats(times),searchAndSimulatedRows:stats(renderTimes)}));

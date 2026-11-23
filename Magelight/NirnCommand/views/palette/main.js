@@ -418,6 +418,12 @@
       }
     },30000);
   }
-  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; if(isOpen) open(); else {heldModifiers=0; if(editor?.isOpen()) editor.hide();} });
+  let heartbeatSerial=0;
+  function heartbeat(serial) {
+    if (!isOpen || serial!==heartbeatSerial) return;
+    if (bridge && catalogSession) bridge.send('catalog','tick|'+catalogSession);
+    setTimeout(()=>heartbeat(serial),1000);
+  }
+  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; if(editor?.isOpen()) editor.hide();} });
   render();
 })();

@@ -38,7 +38,8 @@
     const all=item.all;
     if(terms.every(t=>all.some(w=>w.includes(t)))) return 2;
     const fuzzy=item.fuzzy;
-    if(terms.every(t=>all.some(w=>w.includes(t)) || (t.length>=3 && fuzzy.some(w=>{const limit=t.length<=5?1:2, key=t+'\0'+w; if(query.cache && query.cache.has(key)) return query.cache.get(key); const match=distance(t,w,limit)<=limit; if(query.cache) query.cache.set(key,match); return match;})))) return 1;
+    if(terms.every(t=>all.some(w=>w.includes(t)) || (t.length>=3 && fuzzy.some(w=>{const limit=t.length<=5?1:2, key=t+'\0'+w; if(query.cache && query.cache.has(key)) return query.cache.get(key); let match=distance(t,w,limit)<=limit;
+      if(!match && t[0]===w[0]) {for(let n=Math.max(1,t.length-limit);n<=Math.min(w.length,t.length+limit);n++){if(distance(t,w.slice(0,n),limit)<=limit){match=true;break;}}} if(query.cache) query.cache.set(key,match); return match;})))) return 1;
     return -1;
   }
   function create() {

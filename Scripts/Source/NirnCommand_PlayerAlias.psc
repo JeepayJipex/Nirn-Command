@@ -30,6 +30,8 @@ int _transferAttempt
 int _hotkey
 int _hotkeyModifiers
 bool _keyHeld
+bool _keyArmed
+bool _serviceBusy
 
 Event OnInit()
     Setup()
@@ -46,6 +48,7 @@ Event OnPlayerLoadGame()
 EndEvent
 
 Function Setup()
+    ClosePalette()
     _viewGeneration += 1
     _viewId = 0
     _domReady = false
@@ -73,6 +76,8 @@ Function Setup()
         _hotkeyModifiers = 0
     endif
     _keyHeld = false
+    _keyArmed = !Input.IsKeyPressed(_hotkey)
+    _serviceBusy = false
     RegisterForKey(_hotkey)
     RegisterForModEvent("Magelight_ViewDomReady", "OnDomReady")
     RegisterForModEvent("Magelight_UIModeExited", "OnUIModeExited")
@@ -88,6 +93,18 @@ Function Setup()
 EndFunction
 
 Event OnUpdate()
+    ServiceCatalog()
+    RegisterForSingleUpdate(1.0)
+EndEvent
+
+Function ServiceCatalog()
+    if _serviceBusy
+        return
+    endif
+    _serviceBusy = true
+    if !_keyArmed && !Input.IsKeyPressed(_hotkey)
+        _keyArmed = true
+    endif
     if _viewId == 0
         Connect()
     endif
@@ -124,8 +141,8 @@ Event OnUpdate()
             SendDiscovery()
         endif
     endif
-    RegisterForSingleUpdate(1.0)
-EndEvent
+    _serviceBusy = false
+EndFunction
 
 Event OnItemAdded(Form akBaseItem, int aiItemCount, ObjectReference akItemReference, ObjectReference akSourceContainer)
     StorageUtil.FormListAdd(Game.GetPlayer(), "NirnCommand.Pending", akBaseItem, false)
@@ -236,8 +253,22 @@ int Function PressedModifiers()
     return result
 EndFunction
 
+bool Function ClosePalette()
+    if _viewId == 0
+        return true
+    endif
+    if Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
+        if !Magelight.ReleaseUIMode("NirnCommand") && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
+            Debug.Trace("[NirnCommand] Could not release UI mode: " + Magelight.GetLastError("NirnCommand"))
+            return false
+        endif
+    endif
+    Magelight.ShowView(_viewId, false)
+    return true
+EndFunction
+
 Event OnKeyDown(int keyCode)
-    if keyCode != _hotkey || _keyHeld
+    if keyCode != _hotkey || _keyHeld || !_keyArmed || !Input.IsKeyPressed(keyCode)
         return
     endif
     _keyHeld = true
@@ -246,20 +277,25 @@ Event OnKeyDown(int keyCode)
     endif
     if Magelight.IsUIModeActive()
         if Magelight.GetUIModeView() == _viewId
-            Magelight.ReleaseUIMode("NirnCommand")
-            Magelight.ShowView(_viewId, false)
+            ClosePalette()
         endif
     elseif !Utility.IsInMenuMode()
         if _activeEpoch == 0 && _initialScanEarliest > Utility.GetCurrentRealTime() + 2.0
             _initialScanEarliest = Utility.GetCurrentRealTime() + 2.0
         endif
         Debug.Trace("[NirnCommand] Opening requested view=" + _viewId + " initialEpoch=" + _activeEpoch)
-        Magelight.RequestUIMode(_viewId, false)
+        if !Magelight.RequestUIMode(_viewId, true)
+            Debug.Trace("[NirnCommand] UI mode refused: " + Magelight.GetLastError("NirnCommand"))
+            if !Magelight.IsUIModeActive() || Magelight.GetUIModeView() != _viewId
+                Magelight.ShowView(_viewId, false)
+            endif
+        endif
     endif
 EndEvent
 
 Event OnKeyUp(int keyCode, float holdTime)
     if keyCode == _hotkey
+        _keyArmed = true
         _keyHeld = false
     endif
 EndEvent
@@ -278,8 +314,7 @@ Function HandleHotkey(string payload, string request)
     endif
     if payload == "close"
         if Magelight.GetUIModeView() == _viewId
-            Magelight.ReleaseUIMode("NirnCommand")
-            Magelight.ShowView(_viewId, false)
+            ClosePalette()
         endif
         return
     endif
@@ -517,7 +552,12 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         Debug.Trace("[NirnCommand] Catalog callback rejected view=" + (numArg as int) + " expected=" + _viewId)
         return
     endif
-    if StringUtil.Find(strArg, "applied|") == 0
+    if strArg == "tick|" + _catalogSession && _catalogSession != ""
+        if Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
+            ServiceCatalog()
+        endif
+        return
+    elseif StringUtil.Find(strArg, "applied|") == 0
         int separator = StringUtil.Find(strArg, "|", 8)
         if separator < 0 || StringUtil.Substring(strArg, 8, separator - 8) != _catalogSession
             return
@@ -1020,10 +1060,7 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
         Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
         return
     endif
-    Magelight.ShowView(_viewId, false)
-    bool released = Magelight.ReleaseUIMode("NirnCommand")
-    if !released && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
-        Debug.Trace("[NirnCommand] Could not release UI mode")
+    if !ClosePalette()
         ReportAction(request, "failure")
         return
     endif

@@ -25,3 +25,6 @@ assert.deepEqual(ties.search('silver',{favorites:['c'],usage:{a:{useCount:40,las
 assert.deepEqual(ties.search('silver',{usage:{a:{useCount:2,lastUsedAt:10},b:{useCount:2,lastUsedAt:20}}}).map(x=>x.id),['b','a','c']);
 assert.equal(ties.search('silver sword',{favorites:['c'],usage:{c:{useCount:999}}})[0].id,'a');
 console.log('Favorites, frequency, recency and exact-match precedence passed.');
+const prefix=search.create();prefix.replace('test',[entry('flames','Flames'),entry('exact','Flom'),entry('prefix','Flomancy'),entry('unrelated','Fox')]);
+assert.ok(prefix.search('fam').some(x=>x.id==='flames'));assert.ok(prefix.search('flom').some(x=>x.id==='flames'));assert.deepEqual(prefix.search('flom').slice(0,2).map(x=>x.id),['exact','prefix']);assert.ok(!prefix.search('fam').some(x=>x.id==='unrelated'));assert.ok(!prefix.search('fm').some(x=>x.id==='flames'));
+console.log('Bounded fuzzy prefix and relevance checks passed.');
