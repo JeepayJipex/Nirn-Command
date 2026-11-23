@@ -7,6 +7,12 @@ int Function WorldCount() Global Native
 string Function WorldEntry(int index) Global Native
 Function WorldInspect(int token) Global Native
 string Function WorldInspection(int token) Global Native
+int Function LocationRevision() Global Native
+int Function LocationCount() Global Native
+string Function LocationEntry(int index) Global Native
+Function LocationInspect(int token) Global Native
+string Function LocationInspection(int token) Global Native
+Function WorldOpenMap(int token) Global Native
 Function RefreshDiscovery() Global Native
 int Function DiscoveryRevision() Global Native
 int Function DiscoveryCount() Global Native
