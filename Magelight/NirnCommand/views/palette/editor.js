@@ -71,7 +71,10 @@ window.NirnEditor = (() => {
         if(mode==='provider') {
           if(!current) {message('Select a provider command.');return;}
           const value={...options.getOverride(current.id),hidden:get('hidden').checked};
-          if(current.action.startsWith('shortcut2:') && shortcut?.key) value.action=`shortcut2:${shortcut.key}:${shortcut.mask}`;
+          if(current.action.startsWith('shortcut2:') && shortcut?.key) {
+            const action=`shortcut2:${shortcut.key}:${shortcut.mask}`;
+            if(action===current.action) delete value.action; else value.action=action;
+          }
           if(options.setOverride(current.id,value)) message('Saving changes…'); else message('Overrides unavailable');
           return;
         }

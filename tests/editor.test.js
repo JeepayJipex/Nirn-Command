@@ -33,4 +33,5 @@ providerEditor.open('provider'); f('commands').value=providers[0].id;f('commands
 providerEditor.keydown({key:'F8',code:'F8',preventDefault(){},stopPropagation(){}});f('save').click();
 assert.equal(savedOverride.hidden,true);assert.equal(savedOverride.action,'shortcut2:66:0');assert.equal(providers[0].action,'shortcut2:37:0');
 f('reset').click();assert.equal(savedOverride,null);
+f('hidden').checked=true;f('save').click();assert.equal(savedOverride.hidden,true);assert.equal(savedOverride.action,undefined);
 console.log('Provider remapping, hiding and restoring preserve manifest defaults.');
