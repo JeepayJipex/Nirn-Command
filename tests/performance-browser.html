@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>Palette browser benchmark</title>
+<iframe id="palette" src="../Magelight/NirnCommand/views/palette/index.html" style="width:1200px;height:800px;border:0"></iframe>
+<pre id="report">Running…</pre>
+<script>
+'use strict';
+const frame=document.querySelector('#palette'),report=document.querySelector('#report');
+const stats=values=>{values.sort((a,b)=>a-b);return {median:+values[Math.floor(values.length/2)].toFixed(2),p95:+values[Math.floor(values.length*.95)].toFixed(2)}};
+frame.addEventListener('load',()=>{
+ try {
+  const w=frame.contentWindow,doc=frame.contentDocument,input=doc.querySelector('#query');
+  const queries=['Steel Sword 17','steel sw','heal fast','firebal','flom','fam','zzzzzzzz'],outputs=[];
+  for(const count of [1000,10000,50000]) {
+   const rows=Array.from({length:count},(_,i)=>[i%2?'item':'spell',''+count+':'+i,'game:synthetic:fixture:'+i,['Iron','Steel','Ebony','Silver'][i%4]+' '+['Sword','Shield','Healing','Fireball'][Math.floor(i/4)%4]+' '+i]);
+   const start=performance.now();w.ncCatalogBegin(''+count);for(const row of rows)w.ncAddEntry(row.join('|'));w.ncCatalogComplete(''+count);const catalogMs=performance.now()-start;
+   const durations=[];
+   for(let i=0;i<40;i++) {input.value=queries[i%queries.length];const t=performance.now();input.dispatchEvent(new w.Event('input',{bubbles:true}));void doc.querySelector('#results').offsetHeight;const elapsed=performance.now()-t;if(i>=10)durations.push(elapsed);}
+   outputs.push({count,catalogAndInitialRenderMs:+catalogMs.toFixed(2),searchDomAndLayoutMs:stats(durations)});
+  }
+  report.textContent=JSON.stringify({browser:navigator.userAgent,viewport:'1200x800',warmup:10,iterations:30,description:'real palette input handler, DOM update and forced layout; excludes paint, game and Magelight',outputs});
+ } catch(e){report.textContent='ERROR '+e.stack;}
+});
+</script>

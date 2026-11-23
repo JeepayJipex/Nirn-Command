@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict');
+const search=require('../Magelight/NirnCommand/views/palette/search.js');
+const idx=search.create();
+const entry=(id,label,extra={})=>({id,label,kind:'Item',...extra});
+idx.replace('test',[entry('fire','Fireball'),entry('steel','Steel Sword'),entry('heal','Fast Healing'),entry('god','Toggle god mode'),entry('accent','Épée'),entry('alias','Light', {aliases:['luminosity'],keywords:'illumination'}),entry('fuzzy','Firebald')]);
+const find=q=>idx.search(q).map(x=>x.id);
+assert.ok(find('firebal').includes('fire'));
+assert.equal(find('steel sw')[0],'steel');
+assert.equal(find('heal fast')[0],'heal');
+assert.equal(find('god mode')[0],'god');
+assert.equal(find('EPEE')[0],'accent');
+assert.equal(find('luminosity')[0],'alias');
+assert.equal(find('illumination')[0],'alias');
+assert.equal(find('fireball')[0],'fire');
+assert.equal(idx.search('fireball',{favorites:['fuzzy'],usage:{fuzzy:{useCount:999}}})[0].id,'fire');
+assert.ok(find('frieball').includes('fire'));
+assert.deepEqual(find('zz'),[]);
+idx.replace('test',[entry('new','New entry')]); assert.deepEqual(find('fireball'),[]); assert.equal(find('new')[0],'new');
+console.log('Search ranking, Unicode, aliases, fuzzy matching and index replacement passed.');
+
+
+const ties=search.create();
+ties.replace('test',[entry('a','Silver Sword'),entry('b','Silver Shield'),entry('c','Silver Staff')]);
+assert.deepEqual(ties.search('silver',{favorites:['c'],usage:{a:{useCount:40,lastUsedAt:99},b:{useCount:5,lastUsedAt:10},c:{useCount:1}}}).map(x=>x.id),['c','a','b']);
+assert.deepEqual(ties.search('silver',{usage:{a:{useCount:2,lastUsedAt:10},b:{useCount:2,lastUsedAt:20}}}).map(x=>x.id),['b','a','c']);
+assert.equal(ties.search('silver sword',{favorites:['c'],usage:{c:{useCount:999}}})[0].id,'a');
+console.log('Favorites, frequency, recency and exact-match precedence passed.');
+const prefix=search.create();prefix.replace('test',[entry('flames','Flames'),entry('exact','Flom'),entry('prefix','Flomancy'),entry('unrelated','Fox')]);
+assert.ok(prefix.search('fam').some(x=>x.id==='flames'));assert.ok(prefix.search('flom').some(x=>x.id==='flames'));assert.deepEqual(prefix.search('flom').slice(0,2).map(x=>x.id),['exact','prefix']);assert.ok(!prefix.search('fam').some(x=>x.id==='unrelated'));assert.ok(!prefix.search('fm').some(x=>x.id==='flames'));
+console.log('Bounded fuzzy prefix and relevance checks passed.');

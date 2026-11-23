@@ -2,6 +2,12 @@ param([string]$ConfigPath = (Join-Path $PSScriptRoot 'config.local.json'), [stri
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+& node (Join-Path $PSScriptRoot 'tests/search.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Search tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/heartbeat.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Heartbeat tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/categories.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Category tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/palette.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Palette tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/editor.test.js')
@@ -47,7 +53,7 @@ $dump = & $config.xDump -sse -q -check (Join-Path $build 'verify/NirnCommand.esp
 if ($LASTEXITCODE -ne 0 -or $dump -match '(?im)^.*(?:error:|exception|fatal).*$' -or $dump -notmatch 'Checking: GRUP Top "QUST"' -or $dump -notmatch 'All Done\.') { throw "xEdit check failed: $dump" }
 Set-Content -LiteralPath (Join-Path $build 'verify/xedit-check.log') -Value $dump -Encoding utf8
 New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot 'dist') | Out-Null
-$archive = Join-Path $PSScriptRoot 'dist/NirnCommand-v0.4.0.zip'
+$archive = Join-Path $PSScriptRoot 'dist/NirnCommand-v0.5.0.zip'
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -Force
 & node (Join-Path $PSScriptRoot 'tools/check-package.js') $archive
 if ($LASTEXITCODE -ne 0) { throw 'Archive validation failed' }

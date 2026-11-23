@@ -21,7 +21,7 @@ const localStorage={getItem:key=>store.get(key)||null,setItem:(key,value)=>store
 const window={magelight:bridge,NIRN_COMMANDS:[{id:'builtin:test',label:'Fire',kind:'Console',action:'console:tgm'},{id:'builtin:other',label:'Fireball Camera',kind:'Console',action:'console:tcl'}],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 let now=Date.now(); const timers=[]; class FakeDate extends Date { static now() {return now;} }
 const context=vm.createContext({window,document,localStorage,Set,Map,Date:FakeDate,console,requestAnimationFrame:fn=>fn(),setTimeout:(fn,delay)=>{timers.push({fn,delay});return timers.length;}});
-vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),context);
+vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/search.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),context);
 const key=(key,extra={})=>handlers.keydown({key,code:key,ctrlKey:false,isComposing:false,preventDefault(){},...extra});
 const search=value=>{input.value=value; input.listeners.input();};
 window.ncGameLoaded('controller-session'); window.ncBridgeReady(); assert.ok(sent.some(message=>message[0]==='catalog' && message[1]==='ready|controller-session')); sent.length=0; window.ncGameLoaded();
@@ -65,7 +65,7 @@ const document2={querySelector:s=>selectors2[s],createElement:t=>new Element(t),
 const bridge2={send:(...args)=>sent2.push(args),on:(name,fn)=>{handlers2[name]=fn;}};
 const window2={magelight:bridge2,NIRN_COMMANDS:[{id:'user:é😀',label:'Special',kind:'Console',action:'console:tgm'}],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 const badStorage={getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');},removeItem(){throw Error('unavailable');}};
-vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window2,document:document2,localStorage:badStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
+vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/search.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window2,document:document2,localStorage:badStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
 window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['catalog','ready']); assert.deepEqual(sent2.shift(),['persist','read']); assert.deepEqual(sent2.shift(),['commands','read']); assert.deepEqual(sent2.shift(),['overrides','read']);
 const previous=JSON.stringify({favorites:['user:é😀'],usage:{},settings:{showUnavailable:true}});
 window2.ncPersistBegin('0|1'); window2.ncPersistChunk('0|'+previous); window2.ncPersistDone();
@@ -92,7 +92,7 @@ const sent3=[], handlers3={}, input3=new Element('input'), results3=new Element(
 const document3={querySelector:s=>({'#query':input3,'#results':results3,'#meta':new Element(),'#status':new Element()})[s],createElement:t=>new Element(t),createDocumentFragment:()=>new Element('fragment'),addEventListener:(name,fn)=>{handlers3[name]=fn;}};
 const window3={magelight:{send:(...args)=>sent3.push(args),on:(name,fn)=>{handlers3[name]=fn;}},NIRN_COMMANDS:[],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[{id:'user:legacy',label:'Épée 😀',action:'console:help "été|é"'}]};
 const store3=new Map(), storage3={getItem:key=>store3.get(key)||null,setItem:(key,value)=>store3.set(key,value),removeItem:key=>store3.delete(key)};
-vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window3,document:document3,localStorage:storage3,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
+vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/search.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window3,document:document3,localStorage:storage3,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
 window3.ncBridgeReady(); assert.deepEqual(sent3.shift(),['catalog','ready']); assert.deepEqual(sent3.shift(),['commands','read']); assert.deepEqual(sent3.shift(),['overrides','read']);
 window3.ncCommandsBegin('-1');window3.ncCommandsDone();
 let serialized='';let operations=[];
@@ -108,7 +108,7 @@ console.log('Native command migration and Unicode transaction protocol checks pa
 const sent4=[], timers4=[], handlers4={}, editor4={isOpen:()=>false,open(){},hide(){},hotkeyState(){},hotkeyResult(...args){this.last=args;}};
 let options4;const window4={magelight:{send:(...args)=>sent4.push(args),on:(name,fn)=>handlers4[name]=fn},NirnEditor:{create:options=>(options4=options,editor4),codes:{}},NIRN_COMMANDS:[],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 const document4={querySelector:s=>({'#query':new Element('input'),'#results':new Element(),'#meta':new Element(),'#status':new Element()})[s],createElement:t=>new Element(t),createDocumentFragment:()=>new Element('fragment'),addEventListener(){}};
-vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window4,document:document4,localStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:fn=>timers4.push(fn)}));
+vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/search.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window4,document:document4,localStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:fn=>timers4.push(fn)}));
 assert.equal(options4.setHotkey(66,32,7),true);assert.deepEqual(sent4.shift(),['execute','1|hotkey:66|32']);
 assert.equal(options4.setHotkey(67,0,7),false);window4.ncHotkeyResult('99|ok');assert.equal(editor4.last,undefined);
 window4.ncHotkeyResult('1|ok');assert.deepEqual(editor4.last,[true,7]);timers4.shift()();assert.equal(sent4.length,0);

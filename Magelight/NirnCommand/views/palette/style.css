@@ -46,3 +46,10 @@ footer span { display:flex; gap:5px; align-items:center; }
 .editor input[type="checkbox"] { appearance:auto; flex:none; width:16px; height:16px; padding:0; margin:0; accent-color:#c8ac7e; cursor:pointer; }
 
 .palette.editing { min-height: 410px; }
+
+.categories { display:flex; gap:6px; padding:8px 19px 0; }
+.categories button { border:1px solid transparent; background:transparent; color:#a9a6af; border-radius:5px; padding:5px 10px; cursor:pointer; font:12px Segoe UI,Arial,sans-serif; }
+.categories button.active { color:#f2d29e; border-color:#786546; background:#35302d; }
+.categories button:hover { color:#fff; }
+
+.label mark { color:#f5d59a; background:transparent; font-weight:700; }
