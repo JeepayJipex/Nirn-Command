@@ -173,14 +173,18 @@
     return 'Unavailable: required plugin not detected.';
   }
   const normalize=window.NirnSearch.normalize, searchIndex=window.NirnSearch.create();
-  const categories=['All','Actions','Items','Spells'];
+  const categories=['All','Actions','Items','Spells','NPCs','Locations'];
+  const worldCatalog=window.NirnWorldCatalog?.create();
+  let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldDetail=null;
   let category='All', indexedStatics=false, indexedCommands=null, indexedCatalog=null;
   let indexedDiscovery=null, indexedOverrides=null, effectiveDiscovery=[];
-  function eligible(entry) {return (category==='All' || category===(entry.kind==='Item'?'Items':entry.kind==='Spell'?'Spells':'Actions')) && (settings.showUnavailable!==false || available(entry));}
+  function eligible(entry) {return (category==='All' || category===({Item:'Items',Spell:'Spells',NPC:'NPCs',Location:'Locations'}[entry.kind] || 'Actions')) && (settings.showUnavailable!==false || available(entry));}
   function updateIndex() {
     if(!indexedStatics){searchIndex.replace('static',statics);indexedStatics=true;}
     if(indexedCommands!==commands){searchIndex.replace('commands',commands.filter(supportedUserCommand));indexedCommands=commands;}
     if(indexedCatalog!==discovered){searchIndex.replace('catalog',discovered);indexedCatalog=discovered;}
+    if(indexedNpcs!==worldNpcs){searchIndex.replace('npcs',worldNpcs);indexedNpcs=worldNpcs;}
+    if(indexedLocations!==worldLocations){searchIndex.replace('locations',worldLocations);indexedLocations=worldLocations;}
     if(indexedDiscovery!==modDiscovered || indexedOverrides!==overrides){
       indexedDiscovery=modDiscovered;indexedOverrides=overrides;
       effectiveDiscovery=modDiscovered.filter(e=>!overrides[e.id]?.hidden).map(e=>{const o=overrides[e.id];return e.id.startsWith('provider:') && e.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(o?.action||'')?{...e,action:o.action}:e;});
@@ -201,6 +205,7 @@
       const entries=searchIndex.entries().map(x=>x.entry).filter(eligible), byId=new Map(entries.map(e=>[e.id,e]));
       const ordered=[...favorites.slice(0,8),...Object.keys(usage).sort((a,b)=>(usage[b].lastUsedAt||0)-(usage[a].lastUsedAt||0)).slice(0,8),...statics.map(e=>e.id),...commands.map(e=>e.id)];
       if(category==='Items'||category==='Spells') ordered.push(...entries.slice().sort((a,b)=>normalize(a.label).localeCompare(normalize(b.label))||a.id.localeCompare(b.id)).map(e=>e.id));
+      if(category==='NPCs') ordered.push(...entries.filter(e=>e.kind==='NPC').sort((a,b)=>a.distance-b.distance).slice(0,8).map(e=>e.id));
       return [...new Set(ordered)].map(id=>byId.get(id)).filter(Boolean).slice(0,20);
     }
     return searchIndex.search(query,{favorites,usage,filter:eligible});
@@ -221,6 +226,7 @@
     let start=0;while(start<text.length){let end=start+1;while(end<text.length && marked[end]===marked[start])end++;const part=text.slice(start,end);if(marked[start]){const mark=document.createElement('mark');mark.textContent=part;label.appendChild(mark);}else label.appendChild(document.createTextNode(part));start=end;}
   }
   function render() {
+    if(worldDetail) { renderWorldDetail(); return; }
     const previous=results[selected]?.id; results=getResults();
     const retained=previous ? results.findIndex(e=>e.id===previous) : -1; selected=retained>=0?retained:0;
     if(categoryEl) Array.from(categoryEl.children).forEach((button,i)=>{button.classList.toggle('active',categories[i]===category);button.setAttribute('aria-pressed',String(categories[i]===category));});
@@ -230,11 +236,12 @@
     const frag = document.createDocumentFragment();
     results.forEach((entry,i) => {
       const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
-      const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧'})[entry.kind] || '✦';
+      const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧',NPC:'♙',Location:'⌖'})[entry.kind] || '✦';
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; highlight(label,entry.label,input.value);
       const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : unavailableReason(entry); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
       const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind || '';
+      if(entry.transient) star.disabled=true;
       row.append(icon,info,star,kind);
       row.addEventListener('mouseenter',() => {
         selected=i;
@@ -248,7 +255,30 @@
     if (!entry || entry.transient || !entry.persistent && /^(item|spell):/.test(entry.action)) { statusEl.textContent='This action cannot be saved'; return; }
     favorites = favorites.includes(entry.id) ? favorites.filter(id => id !== entry.id) : [entry.id,...favorites]; save('favorites',favorites); render();
   }
+  function backFromWorldDetail() {
+    worldDetail=null;
+    if(bridge) bridge.send('__escapecapture','0');
+    render(); input.focus();
+  }
+  function renderWorldDetail() {
+    resultsEl.textContent=''; metaEl.textContent=worldDetail.kind.toUpperCase()+' DETAILS';
+    const title=document.createElement('div'); title.className='world-title'; title.textContent=worldDetail.label;
+    const description=document.createElement('div'); description.className='world-description';
+    description.textContent=worldDetail.checking ? (worldDetail.detail || 'Checking reference…') : worldDetail.unavailable ? 'This reference is temporarily unavailable.' : (worldDetail.detail || 'Details unavailable.');
+    const back=document.createElement('button'); back.type='button'; back.textContent='Back to search'; back.addEventListener('click',backFromWorldDetail);
+    resultsEl.append(title,description,back);
+    if(worldDetail.kind==='Location' && !worldDetail.unavailable && !worldDetail.checking) {
+      const map=document.createElement('button'); map.type='button'; map.textContent='Open general map';
+      map.addEventListener('click',()=>{if(bridge) bridge.send('world',`map|${catalogSession}|${worldContext}|${worldDetail.token}`);});
+      resultsEl.appendChild(map);
+    }
+  }
   function execute(entry, left=false) {
+    if(entry && (entry.kind==='NPC' || entry.kind==='Location')) {
+      worldDetail={...entry,checking:true}; renderWorldDetail();
+      if(bridge) {bridge.send('__escapecapture','1'); bridge.send('world',`inspect|${catalogSession}|${worldContext}|${entry.kind.toLowerCase()}|${entry.token}`);}
+      return;
+    }
     if (entry?.action === 'local:clear-history' || entry?.action === 'local:clear-favorites') {
       const kind = entry.action.endsWith('history') ? 'history' : 'favorites';
       if (clearKind === kind && Date.now() - clearRequestedAt < 5000) {
@@ -296,7 +326,41 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldDetail=null; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncWorldContext = function(payload) {
+    const [session,context]=String(payload).split('|');
+    const revision=Number(context);
+    if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
+    worldContext=context; worldNpcs=[]; worldLocations=[]; worldDetail=null; worldCatalog.reset(session,context); render();
+  };
+  window.ncWorldBegin = function(payload) {
+    const [session,context,kind,generation,count]=String(payload).split('|');
+    worldCatalog?.begin(session,context,kind,Number(generation),Number(count));
+  };
+  window.ncWorldEntry = function(payload) {
+    try {
+      const [session,context,kind,generation,index,...rest]=String(payload).split('|');
+      const row=JSON.parse(rest.join('|'));
+      if(!/^-?[0-9]+$/.test(String(row.token)) || !Number.isFinite(row.distance) && kind==='npc') return;
+      worldCatalog?.append(session,context,kind,Number(generation),Number(index),row);
+    } catch (_) {}
+  };
+  window.ncWorldComplete = function(payload) {
+    const [session,context,kind,generation]=String(payload).split('|');
+    if(!worldCatalog?.complete(session,context,kind,Number(generation))) return;
+    const entries=worldCatalog.entries(kind).map(row=>({...row,kind:kind==='npc'?'NPC':'Location',action:`world:${row.token}`,transient:true}));
+    if(kind==='npc') worldNpcs=entries; else worldLocations=entries;
+    render();
+  };
+  window.ncWorldInspect = function(payload) {
+    try {
+      const [session,context,kind,token,...rest]=String(payload).split('|');
+      if(session!==catalogSession || context!==worldContext || !worldDetail || kind!==worldDetail.kind.toLowerCase() || token!==String(worldDetail.token)) return;
+      const result=JSON.parse(rest.join('|'));
+      worldDetail={...worldDetail,checking:false,unavailable:result.available!==true,detail:typeof result.detail==='string'?result.detail:worldDetail.detail};
+      renderWorldDetail();
+    } catch (_) {}
+  };
   window.ncBridgeReady = function() {
     if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
@@ -398,6 +462,7 @@
   const modifierBits={ShiftLeft:1,ShiftRight:2,ControlLeft:4,ControlRight:8,AltLeft:16,AltRight:32};
   document.addEventListener('keydown',event=>{
     if (editor?.isOpen()) { editor.keydown(event); return; }
+    if (worldDetail) { if(event.key==='Escape' || event.key==='Backspace') {event.preventDefault();backFromWorldDetail();} return; }
     if (event.isComposing || event.keyCode===229) return;
     if (modifierBits[event.code]) heldModifiers |= modifierBits[event.code];
     if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('execute',`${++serial}|hotkey:close`); return;}
@@ -424,6 +489,6 @@
     if (bridge && catalogSession) bridge.send('catalog','tick|'+catalogSession);
     setTimeout(()=>heartbeat(serial),1000);
   }
-  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; if(editor?.isOpen()) editor.hide();} });
+  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; worldDetail=null; if(editor?.isOpen()) editor.hide();} });
   render();
 })();

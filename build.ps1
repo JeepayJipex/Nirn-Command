@@ -8,6 +8,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Search tests failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Heartbeat tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/categories.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Category tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/world-catalog.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'World catalog tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/palette.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Palette tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/editor.test.js')

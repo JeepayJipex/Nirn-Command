@@ -1,4 +1,12 @@
 Scriptname NirnCommandNative Hidden
+Function WorldReset() Global Native
+Function WorldRefresh() Global Native
+int Function WorldContext() Global Native
+int Function WorldRevision() Global Native
+int Function WorldCount() Global Native
+string Function WorldEntry(int index) Global Native
+Function WorldInspect(int token) Global Native
+string Function WorldInspection(int token) Global Native
 Function RefreshDiscovery() Global Native
 int Function DiscoveryRevision() Global Native
 int Function DiscoveryCount() Global Native
