@@ -31,6 +31,8 @@ The NPC radius is read once on the first NPC refresh from the optional virtual D
 the value is in Skyrim units and is clamped to 1024–32768. With no valid file,
 the default is 8192. Reopen the game after changing it. The NPC snapshot contains
 at most 256 actors and contains only high-process actors with a loaded 3D model.
+Each refresh examines at most 1024 high-process actors; the native log reports
+when this bound is reached. Results prioritize the closest actors examined.
 
 Sources: [ProcessLists.cpp](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/src/RE/P/ProcessLists.cpp),
 [LocationDiscovery.h](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/L/LocationDiscovery.h),

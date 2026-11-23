@@ -208,7 +208,8 @@
       if(category==='NPCs') ordered.push(...entries.filter(e=>e.kind==='NPC').sort((a,b)=>a.distance-b.distance).slice(0,8).map(e=>e.id));
       return [...new Set(ordered)].map(id=>byId.get(id)).filter(Boolean).slice(0,20);
     }
-    return searchIndex.search(query,{favorites,usage,filter:eligible});
+    const parts=({Actions:['static','commands','providers'],Items:['catalog'],Spells:['catalog'],NPCs:['npcs'],Locations:['locations']})[category];
+    return searchIndex.search(query,{favorites,usage,filter:eligible,parts});
   }
   function highlight(label, text, query) {
     if (!document.createTextNode || query.trimStart().startsWith('>')) {label.textContent=text;return;}

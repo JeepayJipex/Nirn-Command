@@ -157,7 +157,9 @@ void refresh(RE::StaticFunctionTag*)
         auto world=player->GetWorldspace() ? player->GetWorldspace()->GetFormID() : 0;
         struct Item { float distance; std::uint32_t token; std::string row; RE::ObjectRefHandle handle; };
         std::vector<Item> found;
+        std::size_t examined=0;
         processes->ForEachHighActor([&](RE::Actor* actor) {
+            if (++examined>1024) return RE::BSContainer::ForEachResult::kStop;
             if (!valid(actor,player)) return RE::BSContainer::ForEachResult::kContinue;
             const char* name=actor->GetDisplayFullName();
             const float distance=actor->GetDistance(player);
@@ -182,7 +184,7 @@ void refresh(RE::StaticFunctionTag*)
                 handles=std::move(nextHandles);
             }
         }
-        SKSE::log::info("World NPC refresh actors={} elapsed_ms={}",found.size(),std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count());
+        SKSE::log::info("World NPC refresh examined={} actors={} truncated={} elapsed_ms={}",examined,found.size(),examined>1024,std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count());
         pending=false;
     });
 }

@@ -33,6 +33,7 @@ bool _keyHeld
 bool _keyArmed
 bool _serviceBusy
 float _lastWorldRefresh
+bool _worldRefreshedInPalette
 int _worldContext
 int _worldRevision
 int _locationRevision
@@ -67,6 +68,7 @@ Function Setup()
     _locationRevision = 0
     _worldSending = false
     _lastWorldRefresh = 0.0
+    _worldRefreshedInPalette = false
     _npcSentAt = 0.0
     _locationSentAt = 0.0
     _viewGeneration += 1
@@ -136,9 +138,15 @@ Function ServiceCatalog()
         Magelight.Call(_viewId, "ncBridgeReady", "")
     endif
     bool ownPalette = Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId && _viewId != 0
+    if !ownPalette
+        _worldRefreshedInPalette = false
+    endif
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0 && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
-        if now - _lastWorldRefresh >= 2.0
+        if (ownPalette && !_worldRefreshedInPalette) || (!ownPalette && now - _lastWorldRefresh >= 2.0)
             _lastWorldRefresh = now
+            if ownPalette
+                _worldRefreshedInPalette = true
+            endif
             NirnCommandNative.WorldRefresh()
         endif
         if _domReady && !_worldSending

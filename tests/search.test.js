@@ -28,3 +28,8 @@ console.log('Favorites, frequency, recency and exact-match precedence passed.');
 const prefix=search.create();prefix.replace('test',[entry('flames','Flames'),entry('exact','Flom'),entry('prefix','Flomancy'),entry('unrelated','Fox')]);
 assert.ok(prefix.search('fam').some(x=>x.id==='flames'));assert.ok(prefix.search('flom').some(x=>x.id==='flames'));assert.deepEqual(prefix.search('flom').slice(0,2).map(x=>x.id),['exact','prefix']);assert.ok(!prefix.search('fam').some(x=>x.id==='unrelated'));assert.ok(!prefix.search('fm').some(x=>x.id==='flames'));
 console.log('Bounded fuzzy prefix and relevance checks passed.');
+const worlds=search.create();
+worlds.replace('catalog',[entry('item','Guard Armor')]);
+worlds.replace('npcs',[{id:'far',label:'Guard',kind:'NPC',distance:100},{id:'near',label:'Guard',kind:'NPC',distance:10}]);
+assert.deepEqual(worlds.search('guard',{parts:['npcs']}).map(x=>x.id),['near','far']);
+assert.deepEqual(worlds.search('guard',{parts:['catalog']}).map(x=>x.id),['item']);

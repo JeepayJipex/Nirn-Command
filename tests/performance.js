@@ -9,3 +9,11 @@ for(const count of [1000,10000,50000]) {
  start=performance.now();index.replace('catalog',data);const updateMs=performance.now()-start;
  console.log(JSON.stringify({count,indexMs:+indexMs.toFixed(3),updateMs:+updateMs.toFixed(3),search:stats(times),searchAndSimulatedRows:stats(renderTimes)}));
 }
+for(const count of [1000,10000,50000]) {
+ const inventory=Array.from({length:1000},(_,i)=>({id:'item:'+i,label:'Iron Sword '+i,kind:'Item'}));
+ const world=Array.from({length:count},(_,i)=>({id:'world:'+i,label:'Nordic Location '+i,kind:i%2?'Location':'NPC',distance:i}));
+ const idx=search.create(); idx.replace('catalog',inventory); const start=performance.now(); idx.replace('world',world); const indexMs=performance.now()-start;
+ const all=[],items=[];
+ for(let i=0;i<40;i++) {let t=performance.now(); idx.search('iron sword'); if(i>=10) all.push(performance.now()-t); t=performance.now();idx.search('iron sword',{parts:['catalog']}); if(i>=10) items.push(performance.now()-t);}
+ console.log(JSON.stringify({worldCount:count,worldIndexMs:+indexMs.toFixed(3),all:stats(all),itemsOnly:stats(items)}));
+}
