@@ -43,14 +43,14 @@
     if (!bridge || !overridesReady || overridesWriting || !overridesDirty) return;
     const chars=Array.from(JSON.stringify({version:1,overrides}));
     let bytes=0; for(const char of chars) {const code=char.codePointAt(0);bytes+=code<128?1:code<2048?2:code<65536?3:4;}
-    if(bytes>256*1024) {statusEl.textContent=`Overrides exceed 262144 UTF-8 bytes (${bytes})`;return;}
+    if(bytes>256*1024) {statusEl.textContent=`Overrides exceed 262144 UTF-8 bytes (${bytes})`;editor?.overridesResult?.(false);return;}
     const parts=[]; for(let i=0;i<chars.length;i+=100) parts.push(chars.slice(i,i+100).join(''));
     overridesDirty=false; overridesWriting=true; let index=-1;
     function next() {
       const request=String(++overridesSerial), operation=index<0?'begin':index<parts.length?'write':'commit';
-      overridesPending={request,advance:()=>{if(operation==='commit') {overridesWriting=false;statusEl.textContent='Overrides saved';flushOverrides();} else {index++;next();}}};
+      overridesPending={request,advance:()=>{if(operation==='commit') {overridesWriting=false;statusEl.textContent='Overrides saved';if(!overridesDirty) editor?.overridesResult?.(true);flushOverrides();} else {index++;next();}}};
       bridge.send('overrides',operation==='write'?`write|${request}|${parts[index]}`:`${operation}|${request}`);
-      setTimeout(()=>{if(overridesPending?.request===request) {overridesPending=null;overridesWriting=false;overridesDirty=true;statusEl.textContent='Overrides save timed out';}},10000);
+      setTimeout(()=>{if(overridesPending?.request===request) {overridesPending=null;overridesWriting=false;overridesDirty=true;statusEl.textContent='Overrides save timed out';editor?.overridesResult?.('timeout');}},10000);
     }
     next();
   }
@@ -61,7 +61,7 @@
     try {if(overridesCount<0 || Array.from({length:overridesCount},(_,i)=>typeof overridesParts[i]==='string').includes(false)) throw Error('Incomplete');const saved=JSON.parse(overridesParts.join(''));if(saved.version!==1||!saved.overrides||typeof saved.overrides!=='object'||Array.isArray(saved.overrides)) throw Error('Invalid');overrides=saved.overrides;overridesReady=true;render();}
     catch (_) {statusEl.textContent='Overrides file unavailable or invalid';}
   };
-  window.ncOverridesAck = payload=>{const [request,result]=String(payload).split('|');if(!overridesPending||overridesPending.request!==request)return;const pending=overridesPending;overridesPending=null;if(result==='ok') pending.advance();else {overridesWriting=false;overridesDirty=true;statusEl.textContent='Overrides could not be saved';}};
+  window.ncOverridesAck = payload=>{const [request,result]=String(payload).split('|');if(!overridesPending||overridesPending.request!==request)return;const pending=overridesPending;overridesPending=null;if(result==='ok') pending.advance();else {overridesWriting=false;overridesDirty=true;statusEl.textContent='Overrides could not be saved';editor?.overridesResult?.(false);}};
   function validCommands(value) {
     if(!Array.isArray(value)) return [];
     const used=new Set(statics.map(entry=>entry.id));

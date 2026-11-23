@@ -42,5 +42,7 @@ footer span { display:flex; gap:5px; align-items:center; }
 .editor-message { color:#c8ac7e; font-size:11px; min-height:25px; padding-top:8px; }
 .editor-buttons { display:flex; gap:8px; }
 .editor-buttons button { width:auto; min-width:90px; text-align:center; }
+.editor label[data-field="hidden-label"] { flex-direction:row; align-items:center; gap:10px; cursor:pointer; }
+.editor input[type="checkbox"] { appearance:auto; flex:none; width:16px; height:16px; padding:0; margin:0; accent-color:#c8ac7e; cursor:pointer; }
 
 .palette.editing { min-height: 410px; }

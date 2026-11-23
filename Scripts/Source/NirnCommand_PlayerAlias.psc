@@ -24,6 +24,7 @@ float _lastSpellCheck
 float _lastDiscovery
 float _lastHandshake
 float _transferStarted
+float _initialScanEarliest
 int _transferEpoch
 int _transferAttempt
 int _hotkey
@@ -79,7 +80,8 @@ Function Setup()
     _fullScan = true
     StorageUtil.FormListClear(Game.GetPlayer(), "NirnCommand.Pending")
     _lastChange = 0.0
-    _lastSpellCheck = 0.0
+    _lastSpellCheck = Utility.GetCurrentRealTime()
+    _initialScanEarliest = _lastSpellCheck + 30.0
     _lastDiscovery = Utility.GetCurrentRealTime() - 30.0
     RegisterForSingleUpdate(1.0)
     Connect()
@@ -97,12 +99,14 @@ Event OnUpdate()
     endif
     bool ownPalette = Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId && _viewId != 0
     if !_scanning && !_sending && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
-        if _dirty && now - _lastChange >= 0.5
-            ScanCatalog()
-        elseif now - _lastSpellCheck >= 30.0
-            _lastSpellCheck = now
-            if SpellCatalogChanged()
+        if _activeEpoch != 0 || now >= _initialScanEarliest
+            if _dirty && now - _lastChange >= 0.5
                 ScanCatalog()
+            elseif now - _lastSpellCheck >= 30.0
+                _lastSpellCheck = now
+                if SpellCatalogChanged()
+                    ScanCatalog()
+                endif
             endif
         endif
         if now - _lastDiscovery >= 30.0
@@ -246,6 +250,10 @@ Event OnKeyDown(int keyCode)
             Magelight.ShowView(_viewId, false)
         endif
     elseif !Utility.IsInMenuMode()
+        if _activeEpoch == 0 && _initialScanEarliest > Utility.GetCurrentRealTime() + 2.0
+            _initialScanEarliest = Utility.GetCurrentRealTime() + 2.0
+        endif
+        Debug.Trace("[NirnCommand] Opening requested view=" + _viewId + " initialEpoch=" + _activeEpoch)
         Magelight.RequestUIMode(_viewId, false)
     endif
 EndEvent
