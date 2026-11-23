@@ -17,6 +17,12 @@ bool valid(const std::string& data)
     auto parsed = nlohmann::json::parse(data, nullptr, false);
     return parsed.is_object() && parsed.contains("version") && parsed["version"].is_number_integer() && parsed["version"] == 1 && parsed.contains("commands") && parsed["commands"].is_array();
 }
+bool valid_overrides(const std::string& data)
+{
+    if (data.size() > limit) return false;
+    auto parsed = nlohmann::json::parse(data, nullptr, false);
+    return parsed.is_object() && parsed.contains("version") && parsed["version"].is_number_integer() && parsed["version"] == 1 && parsed.contains("overrides") && parsed["overrides"].is_object();
+}
 }
 int read_commands(const std::filesystem::path& file, std::string& output)
 {
@@ -56,6 +62,23 @@ bool valid_hotkey(int key, int modifiers)
 bool write_commands(const std::filesystem::path& file, const std::string& data)
 {
     return valid(data) && write_atomic(file,data);
+}
+int read_overrides(const std::filesystem::path& file, std::string& output)
+{
+    try {
+        if (!std::filesystem::exists(file)) return 1;
+        if (std::filesystem::file_size(file) > limit) return 2;
+        std::ifstream input(file, std::ios::binary);
+        if (!input) return 2;
+        std::string data{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+        if (input.bad() || !valid_overrides(data)) return 2;
+        output = std::move(data);
+        return 0;
+    } catch (const std::exception&) { return 2; }
+}
+bool write_overrides(const std::filesystem::path& file, const std::string& data)
+{
+    return valid_overrides(data) && write_atomic(file,data);
 }
 bool read_hotkey(const std::filesystem::path& file, int& key, int& modifiers)
 {

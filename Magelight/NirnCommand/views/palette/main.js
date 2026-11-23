@@ -24,8 +24,8 @@
   let configWarnings=0;
   for (const entry of [...(window.NIRN_SCANNED_COMMANDS || []), ...(window.NIRN_COMMANDS || [])]) {
     if (!entry || typeof entry.id !== 'string' || !entry.id || typeof entry.label !== 'string' || typeof entry.action !== 'string') { configWarnings++; continue; }
-    if (seen.has(entry.id)) { if (entry.id !== 'builtin:oar:menu') configWarnings++; continue; }
-    if (!/^(console:|skyrimnet:|shortcut:|oar:|local:)/.test(entry.action)) { configWarnings++; continue; }
+    if (seen.has(entry.id)) { configWarnings++; continue; }
+    if (!/^(console:|skyrimnet:|shortcut:|shortcut2:|local:)/.test(entry.action)) { configWarnings++; continue; }
     seen.add(entry.id); statics.push(entry);
   }
   if (configWarnings) console.warn(`[NirnCommand] Ignored ${configWarnings} invalid or duplicate commands.`);
@@ -37,11 +37,38 @@
   let hotkeyPending=null;
   let commands=[], commandsReady=false, commandsReadStarted=false, commandsMissing=false, commandsCount=-2, commandsParts=[];
   let commandsDirty=false, commandsWriting=false, commandsSerial=0, commandsPending=null;
+  let overrides={}, overridesReady=false, overridesReadStarted=false, overridesCount=-2, overridesParts=[];
+  let overridesDirty=false, overridesWriting=false, overridesSerial=0, overridesPending=null;
+  function flushOverrides() {
+    if (!bridge || !overridesReady || overridesWriting || !overridesDirty) return;
+    const chars=Array.from(JSON.stringify({version:1,overrides}));
+    let bytes=0; for(const char of chars) {const code=char.codePointAt(0);bytes+=code<128?1:code<2048?2:code<65536?3:4;}
+    if(bytes>256*1024) {statusEl.textContent=`Overrides exceed 262144 UTF-8 bytes (${bytes})`;return;}
+    const parts=[]; for(let i=0;i<chars.length;i+=100) parts.push(chars.slice(i,i+100).join(''));
+    overridesDirty=false; overridesWriting=true; let index=-1;
+    function next() {
+      const request=String(++overridesSerial), operation=index<0?'begin':index<parts.length?'write':'commit';
+      overridesPending={request,advance:()=>{if(operation==='commit') {overridesWriting=false;statusEl.textContent='Overrides saved';flushOverrides();} else {index++;next();}}};
+      bridge.send('overrides',operation==='write'?`write|${request}|${parts[index]}`:`${operation}|${request}`);
+      setTimeout(()=>{if(overridesPending?.request===request) {overridesPending=null;overridesWriting=false;overridesDirty=true;statusEl.textContent='Overrides save timed out';}},10000);
+    }
+    next();
+  }
+  window.ncOverridesBegin = payload=>{const count=Number(payload);overridesCount=Number.isInteger(count)&&count>=-3&&count<=1024?count:-2;overridesParts=overridesCount>=0?new Array(overridesCount):[];};
+  window.ncOverridesChunk = payload=>{const text=String(payload),split=text.indexOf('|'),i=Number(text.slice(0,split));if(split>=0&&Number.isInteger(i)&&i>=0&&i<overridesCount) overridesParts[i]=text.slice(split+1);};
+  window.ncOverridesDone = ()=>{
+    if(overridesCount===-1) {overrides={};overridesReady=true;render();return;}
+    try {if(overridesCount<0 || Array.from({length:overridesCount},(_,i)=>typeof overridesParts[i]==='string').includes(false)) throw Error('Incomplete');const saved=JSON.parse(overridesParts.join(''));if(saved.version!==1||!saved.overrides||typeof saved.overrides!=='object'||Array.isArray(saved.overrides)) throw Error('Invalid');overrides=saved.overrides;overridesReady=true;render();}
+    catch (_) {statusEl.textContent='Overrides file unavailable or invalid';}
+  };
+  window.ncOverridesAck = payload=>{const [request,result]=String(payload).split('|');if(!overridesPending||overridesPending.request!==request)return;const pending=overridesPending;overridesPending=null;if(result==='ok') pending.advance();else {overridesWriting=false;overridesDirty=true;statusEl.textContent='Overrides could not be saved';}};
   function validCommands(value) {
     if(!Array.isArray(value)) return [];
     const used=new Set(statics.map(entry=>entry.id));
-    return value.filter(entry=>entry && typeof entry.id==='string' && entry.id.startsWith('user:') && typeof entry.label==='string' && entry.label.trim() && typeof entry.action==='string' && /^(console:|skyrimnet:|shortcut:|shortcut2:|oar:)/.test(entry.action) && !used.has(entry.id) && used.add(entry.id));
+    return value.filter(entry=>entry && typeof entry.id==='string' && entry.id.startsWith('user:') && typeof entry.label==='string' && entry.label.trim() && typeof entry.action==='string' && !used.has(entry.id) && used.add(entry.id));
   }
+  // Keep unknown actions in the saved document so a newer version can recover them.
+  const supportedUserCommand = entry => /^(console:|skyrimnet:|shortcut:|shortcut2:)/.test(entry.action);
   function finishCommandsLoad() {
     if (!commandsMissing || (!storageAvailable && !fallbackReady)) return;
     const source=Array.isArray(settings.commands) ? settings.commands : (window.NIRN_USER_COMMANDS || []);
@@ -65,8 +92,11 @@
     next();
   }
   const editor=window.NirnEditor?.create({
-    getCommands:()=>commands,
-    setCommands:value=>{commands=validCommands(value);commandsDirty=true;render();flushCommands();},
+    getCommands:()=>commands.filter(supportedUserCommand),
+    setCommands:value=>{commands=validCommands([...commands.filter(entry=>!supportedUserCommand(entry)),...value]);commandsDirty=true;render();flushCommands();},
+    getProviders:()=>modDiscovered.filter(entry=>entry.id.startsWith('provider:')),
+    getOverride:id=>overrides[id] || {},
+    setOverride:(id,value)=>{if(!overridesReady)return false;if(value) overrides[id]=value;else delete overrides[id];overridesDirty=true;render();flushOverrides();return true;},
     getHotkey:()=>openingHotkey,
     setHotkey:(key,mask,session)=>{
       if(!bridge) {statusEl.textContent='Shortcut bridge unavailable'; return false;}
@@ -133,14 +163,13 @@
     if(result==='ok') pendingAck.advance(); else { fallbackWriting=false; fallbackDirty=true; statusEl.textContent='Preferences could not be saved'; }
   };
   function available(entry) {
+    if (entry.requirementsMet === false) return false;
     if (!capabilities) return true;
     if (entry.action.startsWith('console:')) return capabilities[0];
     if (entry.action.startsWith('skyrimnet:')) return capabilities[1];
-    if (entry.action === 'oar:menu') return capabilities[2];
     return true;
   }
   function unavailableReason(entry) {
-    if (entry.action === 'oar:menu' && capabilities?.[3]) return 'Unavailable: incompatible UI API. Use a custom shortcut.';
     return 'Unavailable: required plugin not detected.';
   }
   const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -161,7 +190,8 @@
       const pos = q.indexOf('>'), raw = q.slice(pos + 1);
       return raw.trim() ? [{ id:'direct:' + raw, label:'Run: ' + raw, detail:'Console command', kind:'Console', action:'console:' + raw, transient:true }] : [];
     }
-    const entries = statics.concat(commands, modDiscovered, discovered).filter(entry => entry.id!=='oar:configured' || (capabilities && capabilities[3] && !capabilities[2])).filter(entry => settings.showUnavailable !== false || available(entry));
+    const providersApplied=modDiscovered.filter(entry=>!overrides[entry.id]?.hidden).map(entry=>{const override=overrides[entry.id];return entry.id.startsWith('provider:') && entry.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(override?.action || '') ? {...entry,action:override.action} : entry;});
+    const entries = statics.concat(commands.filter(supportedUserCommand), providersApplied, discovered).filter(entry => settings.showUnavailable !== false || available(entry));
     if (!query) {
       const byId = new Map(entries.map(e => [e.id, e]));
       const ordered = [...favorites.slice(0, 8), ...Object.keys(usage).sort((a,b) => (usage[b].lastUsedAt || 0) - (usage[a].lastUsedAt || 0)).slice(0, 8), ...statics.map(e => e.id), ...commands.map(e => e.id)];
@@ -205,7 +235,7 @@
       } else { clearKind=kind; clearRequestedAt=Date.now(); statusEl.textContent='Activate again within five seconds to clear ' + kind; }
       return;
     }
-    if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey') { if (entry.action === 'local:commands' && !commandsReady) {statusEl.textContent='Commands unavailable or still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : 'command');} return; }
+    if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey' || entry?.action === 'local:providers') { if (entry.action === 'local:commands' && !commandsReady) {statusEl.textContent='Commands unavailable or still loading';return;} if(entry.action==='local:providers' && !overridesReady) {statusEl.textContent='Overrides unavailable or still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : entry.action==='local:providers'?'provider':'command');} return; }
     if (entry?.action === 'local:toggle-unavailable') { settings.showUnavailable=settings.showUnavailable===false; save('settings',settings); statusEl.textContent=settings.showUnavailable ? 'Unavailable actions shown' : 'Unavailable actions hidden'; render(); return; }
     if (entry?.action === 'local:refresh') { if (bridge) { catalogRetries=0; bridge.send('catalog',catalogSession ? 'refresh|'+catalogSession : 'refresh'); statusEl.textContent='Loading…'; } return; }
     if (!entry || !bridge) { statusEl.textContent='Bridge unavailable'; return; }
@@ -230,7 +260,7 @@
   window.ncHotkeyResult = function(payload) { const [request,result]=String(payload).split('|'); if(request!==hotkeyPending?.request) return; const {session}=hotkeyPending; hotkeyPending=null; editor?.hotkeyResult(result==='ok',session); statusEl.textContent=result==='ok'?'Shortcut saved':'Shortcut could not be saved'; };
   window.ncCapabilities = function(payload) { capabilities=String(payload).split('|').map(value=>value==='1'); render(); };
   window.ncDiscoveryBegin = function() { incomingMods=[]; };
-  window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && (/^(mcm:|oar:configured$)/.test(entry.id)) && typeof entry.label==='string' && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) incomingMods.push(entry); } catch (_) {} };
+  window.ncDiscoveryEntry = function(payload) { try { const entry=JSON.parse(String(payload)); if(entry && typeof entry.id==='string' && typeof entry.label==='string' && typeof entry.action==='string' && ((/^mcm:/.test(entry.id) && /^shortcut2:[0-9]+:[0-9]+$/.test(entry.action)) || (/^provider:[a-z0-9_-]+:[a-z0-9_-]+$/.test(entry.id) && /^(shortcut2:[0-9]+:[0-9]+|console:.+)$/.test(entry.action) && typeof entry.requirementsMet==='boolean'))) incomingMods.push(entry); } catch (_) {} };
   window.ncDiscoveryComplete = function() { modDiscovered=incomingMods; incomingMods=[]; render(); };
   let catalogSession='', catalogTransferSerial=0, catalogRetries=0, spellReceivedEpoch='';
   function requestCatalogSnapshot(reason) {
@@ -249,6 +279,7 @@
     if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
     if (!commandsReadStarted && bridge) {commandsReadStarted=true; bridge.send('commands','read');}
+    if (!overridesReadStarted && bridge) {overridesReadStarted=true; bridge.send('overrides','read');}
   };
   let catalogBatches=0, catalogInvalid=false, catalogTransferStarted=0, catalogFragment=null, catalogProgress=0, catalogCategory='', catalogAttempt=0, catalogTransferKey='';
   function transferFrame(payload) {

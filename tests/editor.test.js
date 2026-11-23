@@ -25,3 +25,12 @@ editor.hotkeyResult(true);assert.equal(closed,1);
 editor.open('hotkey');f('capture').click();press('PageUp','PageUp');f('save').click();assert.equal(hotkey.key,66);
 press('Escape','Escape'); editor.hotkeyResult('timeout'); assert.equal(f('message').textContent,'Result unconfirmed. Current shortcut is being checked.'); editor.hotkeyState({key:66,mask:32}); assert.equal(f('message').textContent,'Current shortcut: Alt Right + F8'); editor.hotkeyResult(false); assert.equal(f('message').textContent,'Could not save shortcut'); editor.hide(); editor.open('hotkey'); const before=closed; editor.hotkeyResult(true,1); assert.equal(closed,before); assert.equal(editor.isOpen(),true);
 console.log('Editor capture, left/right modifiers, command CRUD, and opening shortcut checks passed.');
+// Provider overrides remain separate from the immutable manifest entries.
+let savedOverride=null;
+const providers=[{id:'provider:fictional:menu',label:'Fictional menu',action:'shortcut2:37:0'}];
+const providerEditor=window.NirnEditor.create({getCommands:()=>[],setCommands:()=>{},getProviders:()=>providers,getOverride:()=>savedOverride||{},setOverride:(id,value)=>{assert.equal(id,providers[0].id);savedOverride=value;return true;},getHotkey:()=>({key:210,mask:0}),setHotkey:()=>{},onClose:()=>{}});
+providerEditor.open('provider'); f('commands').value=providers[0].id;f('commands').listeners.change();f('hidden').checked=true;f('capture').click();
+providerEditor.keydown({key:'F8',code:'F8',preventDefault(){},stopPropagation(){}});f('save').click();
+assert.equal(savedOverride.hidden,true);assert.equal(savedOverride.action,'shortcut2:66:0');assert.equal(providers[0].action,'shortcut2:37:0');
+f('reset').click();assert.equal(savedOverride,null);
+console.log('Provider remapping, hiding and restoring preserve manifest defaults.');

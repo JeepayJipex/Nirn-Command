@@ -56,12 +56,8 @@ window.ncCapabilities('1|1|0|1');
 window.ncDiscoveryBegin();
 window.ncDiscoveryEntry(JSON.stringify({id:'mcm:Example:open',label:'Example — Open',kind:'Mod',action:'shortcut2:37:0',source:'MCM/Settings/keybinds.json',confidence:'configured association'}));
 window.ncDiscoveryEntry(JSON.stringify({id:'mcm:Example:fake',label:'Unmapped',kind:'Mod',action:'console:tgm'}));
-window.ncDiscoveryEntry(JSON.stringify({id:'oar:configured',label:'OAR configured',kind:'Mod',action:'shortcut2:45:17',source:'OpenAnimationReplacer.ini',confidence:'configuration only'}));
 window.ncDiscoveryComplete();search('Example');assert.equal(results.children[0].children[1].children[0].textContent,'Example — Open');assert.match(results.children[0].title,/MCM/);
 search('Unmapped');assert.equal(results.children[0].textContent,'No results.');
-search('OAR configured');assert.equal(results.children[0].children[1].children[0].textContent,'OAR configured');
-window.ncCapabilities('1|1|1|1');search('OAR configured');assert.equal(results.children[0].textContent,'No results.');
-console.log('Discovered source, action validation, and OAR preference checks passed.');
 // Verify the persistent fallback sends bounded UTF-8 chunks and commits them in order.
 const sent2=[], handlers2={}, results2=new Element(), input2=new Element('input'), status2=new Element();
 const selectors2={'#query':input2,'#results':results2,'#meta':new Element(),'#status':status2};
@@ -70,7 +66,7 @@ const bridge2={send:(...args)=>sent2.push(args),on:(name,fn)=>{handlers2[name]=f
 const window2={magelight:bridge2,NIRN_COMMANDS:[{id:'user:é😀',label:'Special',kind:'Console',action:'console:tgm'}],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 const badStorage={getItem(){throw Error('unavailable');},setItem(){throw Error('unavailable');},removeItem(){throw Error('unavailable');}};
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window2,document:document2,localStorage:badStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
-window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['catalog','ready']); assert.deepEqual(sent2.shift(),['persist','read']); assert.deepEqual(sent2.shift(),['commands','read']);
+window2.ncBridgeReady(); assert.deepEqual(sent2.shift(),['catalog','ready']); assert.deepEqual(sent2.shift(),['persist','read']); assert.deepEqual(sent2.shift(),['commands','read']); assert.deepEqual(sent2.shift(),['overrides','read']);
 const previous=JSON.stringify({favorites:['user:é😀'],usage:{},settings:{showUnavailable:true}});
 window2.ncPersistBegin('0|1'); window2.ncPersistChunk('0|'+previous); window2.ncPersistDone();
 assert.equal(results2.children[0].children[2].textContent,'★');
@@ -97,7 +93,7 @@ const document3={querySelector:s=>({'#query':input3,'#results':results3,'#meta':
 const window3={magelight:{send:(...args)=>sent3.push(args),on:(name,fn)=>{handlers3[name]=fn;}},NIRN_COMMANDS:[],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[{id:'user:legacy',label:'Épée 😀',action:'console:help "été|é"'}]};
 const store3=new Map(), storage3={getItem:key=>store3.get(key)||null,setItem:(key,value)=>store3.set(key,value),removeItem:key=>store3.delete(key)};
 vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),vm.createContext({window:window3,document:document3,localStorage:storage3,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0}));
-window3.ncBridgeReady(); assert.deepEqual(sent3.shift(),['catalog','ready']); assert.deepEqual(sent3.shift(),['commands','read']);
+window3.ncBridgeReady(); assert.deepEqual(sent3.shift(),['catalog','ready']); assert.deepEqual(sent3.shift(),['commands','read']); assert.deepEqual(sent3.shift(),['overrides','read']);
 window3.ncCommandsBegin('-1');window3.ncCommandsDone();
 let serialized='';let operations=[];
 while(sent3.length) {

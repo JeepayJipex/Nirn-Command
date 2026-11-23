@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "provider": { "id": "example-tools", "name": "Example Tools", "version": "1.0.0", "description": "A fictional provider" },
+  "commands": [
+    { "id": "open-menu", "name": "Example Tools — Open menu", "keywords": ["example", "menu"], "action": { "type": "shortcut", "key": 37, "modifiers": 4 } },
+    { "id": "toggle-god-mode", "name": "Example Tools — Toggle god mode", "action": { "type": "console", "command": "tgm" } }
+  ]
+}

@@ -6,8 +6,6 @@ $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'Palette tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/editor.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Editor tests failed' }
-& node (Join-Path $PSScriptRoot 'tests/scanner.test.js')
-if ($LASTEXITCODE -ne 0) { throw 'Scanner tests failed' }
 foreach ($path in @($config.compiler, $config.flags, $config.skyrimMaster, $config.xDump) + @($config.imports)) {
     if (!$path -or !(Test-Path -LiteralPath $path)) { throw "Build input missing: $path" }
 }
@@ -33,8 +31,6 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Magelight') -Destination $stage
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'SKSE/Plugins') | Out-Null
 Copy-Item -LiteralPath $NativeDll -Destination (Join-Path $stage 'SKSE/Plugins/NirnCommandNative.dll')
 Copy-Item -LiteralPath $NativeLicenses -Destination (Join-Path $stage 'licenses') -Recurse
-New-Item -ItemType Directory -Force -Path (Join-Path $stage 'licenses/OpenAnimationReplacer') | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'native/OAR-COPYING.txt') -Destination (Join-Path $stage 'licenses/OpenAnimationReplacer/COPYING.txt')
 foreach ($script in Get-ChildItem -LiteralPath (Join-Path $stage 'Magelight/NirnCommand/views/palette') -Filter '*.js') {
     & node --check $script.FullName
     if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($script.Name)" }

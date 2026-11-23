@@ -1,9 +1,12 @@
 #include "PCH.h"
-#include "OpenAnimationReplacerAPI-UI.h"
+
 #include "discovery.h"
+#include "providers.h"
 #include "storage.h"
 #include <nlohmann/json.hpp>
 #include <charconv>
+#include <atomic>
+#include <thread>
 
 namespace {
     std::filesystem::path DataDirectory()
@@ -101,8 +104,51 @@ namespace {
         std::scoped_lock lock(commandsMutex);
         return !commandFile.empty() && !commandOverflow && nirn::write_commands(commandFile,commandWrite);
     }
+    std::mutex overridesMutex;
+    std::vector<std::string> overridesChunks;
+    std::string overridesWrite;
+    bool overridesOverflow = false;
+    const auto overridesFile = dataDirectory.empty() ? std::filesystem::path{} : dataDirectory / "SKSE/Plugins/NirnCommand/overrides.json";
+    std::int32_t LoadOverrides(RE::StaticFunctionTag*)
+    {
+        std::scoped_lock lock(overridesMutex);
+        overridesChunks.clear();
+        std::string data;
+        if (overridesFile.empty()) return -2;
+        auto result = nirn::read_overrides(overridesFile, data);
+        if (result == 1) return -1;
+        if (result != 0) return -2;
+        overridesChunks = nirn::split_utf8(data, 480);
+        return overridesChunks.empty() && !data.empty() ? -2 : static_cast<std::int32_t>(overridesChunks.size());
+    }
+    RE::BSFixedString OverridesChunk(RE::StaticFunctionTag*, std::int32_t index)
+    {
+        std::scoped_lock lock(overridesMutex);
+        if (index < 0 || static_cast<std::size_t>(index) >= overridesChunks.size()) return "";
+        return overridesChunks[index];
+    }
+    void BeginOverridesWrite(RE::StaticFunctionTag*)
+    {
+        std::scoped_lock lock(overridesMutex);
+        overridesWrite.clear(); overridesOverflow = false;
+    }
+    bool AppendOverridesChunk(RE::StaticFunctionTag*, RE::BSFixedString chunk)
+    {
+        std::scoped_lock lock(overridesMutex);
+        std::string_view value(chunk.c_str());
+        if (value.size() > 480 || overridesWrite.size() + value.size() > 256 * 1024) { overridesOverflow = true; return false; }
+        overridesWrite.append(value);
+        return true;
+    }
+    bool CommitOverridesWrite(RE::StaticFunctionTag*)
+    {
+        std::scoped_lock lock(overridesMutex);
+        return !overridesFile.empty() && !overridesOverflow && nirn::write_overrides(overridesFile, overridesWrite);
+    }
     std::mutex discoveryMutex;
     std::vector<std::string> discoveryEntries;
+    std::vector<std::string> discoveryTransfer;
+    std::atomic_bool discoveryRunning{false};
     void MarkBoundPapyrus(std::string& serialized)
     {
         auto entry=nlohmann::json::parse(serialized,nullptr,false);
@@ -133,41 +179,55 @@ namespace {
     }
     void RefreshDiscovery(RE::StaticFunctionTag*)
     {
-        if (dataDirectory.empty()) return;
-        auto entries = nirn::discover_mcm(dataDirectory);
-        for (auto& entry : entries) MarkBoundPapyrus(entry);
-        auto oar = nirn::discover_oar(dataDirectory);
-        entries.insert(entries.end(), oar.begin(), oar.end());
-        std::scoped_lock lock(discoveryMutex);
-        discoveryEntries = std::move(entries);
+        if (dataDirectory.empty() || discoveryRunning.exchange(true)) return;
+        try {
+            std::thread([] {
+                try {
+                    auto entries = nirn::discover_mcm(dataDirectory);
+                    auto providers = nirn::discover_providers(dataDirectory);
+                    entries.insert(entries.end(), providers.begin(), providers.end());
+
+                    std::scoped_lock lock(discoveryMutex);
+                    discoveryEntries = std::move(entries);
+                } catch (const std::exception& error) {
+                    SKSE::log::error("Discovery failed: {}", error.what());
+                }
+                discoveryRunning = false;
+            }).detach();
+        } catch (const std::exception& error) {
+            discoveryRunning = false;
+            SKSE::log::error("Could not start discovery: {}", error.what());
+        }
     }
     std::int32_t DiscoveryCount(RE::StaticFunctionTag*)
     {
         std::scoped_lock lock(discoveryMutex);
-        return static_cast<std::int32_t>(discoveryEntries.size());
+        discoveryTransfer = discoveryEntries;
+        return static_cast<std::int32_t>(discoveryTransfer.size());
     }
     RE::BSFixedString DiscoveryEntry(RE::StaticFunctionTag*, std::int32_t index)
     {
-        std::scoped_lock lock(discoveryMutex);
-        if (index < 0 || static_cast<std::size_t>(index) >= discoveryEntries.size()) return "";
-        return discoveryEntries[index];
-    }
-    OAR_API::UI::IUIInterface* OarUI()
-    {
-        auto module = GetModuleHandleA("OpenAnimationReplacer.dll");
-        if (!module) return nullptr;
-        auto request = reinterpret_cast<OAR_API::UI::_RequestPluginAPI_UI>(GetProcAddress(module, "RequestPluginAPI_UI"));
-        if (!request) return nullptr;
-        auto plugin = SKSE::PluginDeclaration::GetSingleton();
-        return request(OAR_API::UI::InterfaceVersion::V3, plugin->GetName().data(), plugin->GetVersion());
-    }
-    bool IsOarAvailable(RE::StaticFunctionTag*) { return OarUI() != nullptr; }
-    bool ToggleOar(RE::StaticFunctionTag*)
-    {
-        auto api = OarUI();
-        if (!api) return false;
-        SKSE::GetTaskInterface()->AddTask([api]() { api->ToggleMenu(); });
-        return true;
+        std::string entry;
+        {
+            std::scoped_lock lock(discoveryMutex);
+            if (index < 0 || static_cast<std::size_t>(index) >= discoveryTransfer.size()) return "";
+            entry = discoveryTransfer[index];
+        }
+        MarkBoundPapyrus(entry);
+        auto parsed = nlohmann::json::parse(entry, nullptr, false);
+        if (parsed.is_object() && parsed.contains("requiredPlugins") && parsed["requiredPlugins"].is_array()) {
+            auto handler = RE::TESDataHandler::GetSingleton();
+            bool available = handler != nullptr;
+            for (const auto& plugin : parsed["requiredPlugins"]) {
+                if (!plugin.is_string() || !handler || !handler->LookupModByName(plugin.get<std::string>())) {
+                    available = false;
+                    break;
+                }
+            }
+            parsed["requirementsMet"] = available;
+            entry = parsed.dump();
+        }
+        return entry;
     }
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm)
     {
@@ -182,11 +242,14 @@ namespace {
         vm->RegisterFunction("BeginCommandsWrite", "NirnCommandNative", BeginCommandsWrite);
         vm->RegisterFunction("AppendCommandsChunk", "NirnCommandNative", AppendCommandsChunk);
         vm->RegisterFunction("CommitCommandsWrite", "NirnCommandNative", CommitCommandsWrite);
+        vm->RegisterFunction("LoadOverrides", "NirnCommandNative", LoadOverrides);
+        vm->RegisterFunction("OverridesChunk", "NirnCommandNative", OverridesChunk);
+        vm->RegisterFunction("BeginOverridesWrite", "NirnCommandNative", BeginOverridesWrite);
+        vm->RegisterFunction("AppendOverridesChunk", "NirnCommandNative", AppendOverridesChunk);
+        vm->RegisterFunction("CommitOverridesWrite", "NirnCommandNative", CommitOverridesWrite);
         vm->RegisterFunction("RefreshDiscovery", "NirnCommandNative", RefreshDiscovery);
         vm->RegisterFunction("DiscoveryCount", "NirnCommandNative", DiscoveryCount);
         vm->RegisterFunction("DiscoveryEntry", "NirnCommandNative", DiscoveryEntry);
-        vm->RegisterFunction("IsOarAvailable", "NirnCommandNative", IsOarAvailable);
-        vm->RegisterFunction("ToggleOar", "NirnCommandNative", ToggleOar);
         return true;
     }
 }

@@ -22,6 +22,7 @@ bool requirements(const json& owner, json& result) {
     const auto& req = owner["requires"];
     if (!req.is_object() || !req.contains("plugins") || !req["plugins"].is_array()) return false;
     for (const auto& plugin : req["plugins"]) {
+        if (result.size() >= 32) return false;
         if (!text(plugin, 128)) return false;
         const auto name = plugin.get<std::string>();
         if (name.find_first_of("\\/:") != std::string::npos) return false;
@@ -77,7 +78,9 @@ std::vector<std::string> discover_providers(const std::filesystem::path& data) {
                     }
                     const auto id = "provider:" + provider["id"].get<std::string>() + ":" + cmd["id"].get<std::string>();
                     json entry = {{"id",id},{"label",cmd["name"]},{"kind","Mod"},{"action",encoded},{"keywords",keywords},{"source",provider["name"]},{"requiredPlugins",deps}};
-                    commands[id].push_back(entry.dump());
+                    auto serialized = entry.dump();
+                    if (serialized.size() > 1800) continue;
+                    commands[id].push_back(std::move(serialized));
                     } catch (const std::exception&) { continue; }
                 }
             } catch (const std::exception&) { continue; }

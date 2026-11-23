@@ -57,6 +57,7 @@ Function Setup()
     RegisterForModEvent("Magelight_JS_persist", "OnPersist")
     RegisterForModEvent("Magelight_JS_hotkey", "OnHotkey")
     RegisterForModEvent("Magelight_JS_commands", "OnCommands")
+    RegisterForModEvent("Magelight_JS_overrides", "OnOverrides")
     UnregisterForAllKeys()
     _hotkey = 210
     _hotkeyModifiers = 0
@@ -158,7 +159,8 @@ Function Connect()
         bool persistReady = Magelight.RegisterListener(_viewId, "persist")
         bool hotkeyReady = Magelight.RegisterListener(_viewId, "hotkey")
         bool commandsReady = Magelight.RegisterListener(_viewId, "commands")
-        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady
+        bool overridesReady = Magelight.RegisterListener(_viewId, "overrides")
+        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady || !overridesReady
             Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
             _viewId = 0
             return
@@ -179,23 +181,13 @@ Function SendCapabilities()
     endif
     int consoleAvailable = 0
     int skyrimNetAvailable = 0
-    int oarAvailable = 0
-    int oarInstalled = 0
     if SKSE.GetPluginVersion("ConsoleUtilSSE") >= 0 || SKSE.GetPluginVersion("ConsoleUtil") >= 0
         consoleAvailable = 1
     endif
     if SKSE.GetPluginVersion("SkyrimNet") >= 0
         skyrimNetAvailable = 1
     endif
-    if SKSE.GetPluginVersion("OpenAnimationReplacer") >= 0
-        oarInstalled = 1
-    endif
-    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
-        if NirnCommandNative.IsOarAvailable()
-            oarAvailable = 1
-        endif
-    endif
-    Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable + "|" + oarAvailable + "|" + oarInstalled)
+    Magelight.Call(_viewId, "ncCapabilities", consoleAvailable + "|" + skyrimNetAvailable)
 EndFunction
 
 bool Function ValidShortcut(int keyCode, int modifiers)
@@ -359,6 +351,59 @@ Event OnCommands(string eventName, string payload, float numArg, Form sender)
         Magelight.Call(_viewId, "ncCommandsAck", request + "|ok")
     else
         Magelight.Call(_viewId, "ncCommandsAck", request + "|failure")
+    endif
+EndEvent
+
+Event OnOverrides(string eventName, string payload, float numArg, Form sender)
+    if (numArg as int) != _viewId || _viewId == 0
+        return
+    endif
+    if payload == "read"
+        int count = -3
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+            count = NirnCommandNative.LoadOverrides()
+        endif
+        int sendView = _viewId
+        int viewGeneration = _viewGeneration
+        Magelight.Call(sendView, "ncOverridesBegin", count as string)
+        int i = 0
+        while i < count && sendView == _viewId && viewGeneration == _viewGeneration
+            Magelight.Call(sendView, "ncOverridesChunk", i + "|" + NirnCommandNative.OverridesChunk(i))
+            i += 1
+            if i % 20 == 0
+                Utility.WaitMenuMode(0.01)
+            endif
+        endwhile
+        if sendView == _viewId && viewGeneration == _viewGeneration
+            Magelight.Call(sendView, "ncOverridesDone", "")
+        endif
+        return
+    endif
+    int first = StringUtil.Find(payload, "|")
+    int second = StringUtil.Find(payload, "|", first + 1)
+    if first < 1
+        return
+    endif
+    string operation = StringUtil.Substring(payload, 0, first)
+    string request = StringUtil.Substring(payload, first + 1)
+    if second > first
+        request = StringUtil.Substring(payload, first + 1, second - first - 1)
+    endif
+    bool success = false
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        if operation == "begin"
+            NirnCommandNative.BeginOverridesWrite()
+            success = true
+        elseif operation == "write" && second > first
+            success = NirnCommandNative.AppendOverridesChunk(StringUtil.Substring(payload, second + 1))
+        elseif operation == "commit"
+            success = NirnCommandNative.CommitOverridesWrite()
+        endif
+    endif
+    if success
+        Magelight.Call(_viewId, "ncOverridesAck", request + "|ok")
+    else
+        Magelight.Call(_viewId, "ncOverridesAck", request + "|failure")
     endif
 EndEvent
 
@@ -952,14 +997,6 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
     if StringUtil.Find(payload, "skyrimnet:") == 0 && SKSE.GetPluginVersion("SkyrimNet") < 0
         Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
         return
-    elseif payload == "oar:menu"
-        if SKSE.GetPluginVersion("OpenAnimationReplacer") < 0
-            Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
-            return
-        elseif SKSE.GetPluginVersion("NirnCommandNative") < 0 || !NirnCommandNative.IsOarAvailable()
-            Magelight.Call(_viewId, "ncActionResult", request + "|incompatible_api")
-            return
-        endif
     elseif StringUtil.Find(payload, "console:") == 0 && SKSE.GetPluginVersion("ConsoleUtilSSE") < 0 && SKSE.GetPluginVersion("ConsoleUtil") < 0
         Magelight.Call(_viewId, "ncActionResult", request + "|missing_plugin")
         return
@@ -993,13 +1030,6 @@ Event OnExecute(string eventName, string payload, float numArg, Form sender)
             ReportAction(request, "sent")
         else
             ReportAction(request, "failure")
-        endif
-        return
-    elseif payload == "oar:menu"
-        if SKSE.GetPluginVersion("NirnCommandNative") >= 0 && NirnCommandNative.ToggleOar()
-            ReportAction(request, "sent")
-        else
-            ReportAction(request, "unavailable")
         endif
         return
     elseif StringUtil.Find(payload, "shortcut2:") == 0
