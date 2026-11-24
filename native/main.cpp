@@ -243,6 +243,7 @@ namespace {
         vm->RegisterFunction("ConfigureHotkey", "NirnCommandNative", nirn::hotkey_runtime::configure);
         vm->RegisterFunction("HotkeyReady", "NirnCommandNative", nirn::hotkey_runtime::ready);
         vm->RegisterFunction("ConsumeHotkey", "NirnCommandNative", nirn::hotkey_runtime::consume);
+        vm->RegisterFunction("RecoverHotkey", "NirnCommandNative", nirn::hotkey_runtime::recover);
         vm->RegisterFunction("WorldReset", "NirnCommandNative", nirn::world_runtime::reset);
         vm->RegisterFunction("WorldRefresh", "NirnCommandNative", nirn::world_runtime::refresh);
         vm->RegisterFunction("DiagnoseLocations", "NirnCommandNative", nirn::world_runtime::diagnoseLocations);

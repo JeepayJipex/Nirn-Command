@@ -1,6 +1,7 @@
 #include "PCH.h"
 #include "hotkey_runtime.h"
 #include "hotkey_state.h"
+#include <array>
 
 namespace nirn::hotkey_runtime {
 namespace {
@@ -10,19 +11,21 @@ int keyCode = 210;
 int expectedModifiers = 0;
 bool available = false;
 int viewId = 0;
+std::array<bool, 256> keys{};
 
 bool pressed(int key)
 {
-    auto manager = RE::BSInputDeviceManager::GetSingleton();
-    auto keyboard = manager ? manager->GetKeyboard() : nullptr;
-    return keyboard && keyboard->IsPressed(key);
+    if (key < 0 || key >= static_cast<int>(keys.size())) return false;
+    const unsigned scan = (key & 0x7f) | ((key & 0x80) ? 0xe000 : 0);
+    const auto virtualKey = MapVirtualKeyW(scan, MAPVK_VSC_TO_VK_EX);
+    return keys[key] || (virtualKey && (GetAsyncKeyState(virtualKey) & 0x8000));
 }
 
 int modifiers()
 {
     int result = 0;
-    const int keys[] = {42, 54, 29, 157, 56, 184};
-    for (int i = 0; i < 6; ++i) if (pressed(keys[i])) result |= 1 << i;
+    const int modifierKeys[] = {42, 54, 29, 157, 56, 184};
+    for (int i = 0; i < 6; ++i) if (keys[modifierKeys[i]]) result |= 1 << i;
     return result;
 }
 
@@ -37,6 +40,10 @@ public:
             if (!button || event->GetDevice() != RE::INPUT_DEVICE::kKeyboard) continue;
             auto id = button->AsIDEvent()->GetIDCode();
             std::scoped_lock lock(mutex);
+            if (id < keys.size()) {
+                if (button->IsDown()) keys[id] = true;
+                else if (button->IsUp()) keys[id] = false;
+            }
             if (id != static_cast<unsigned>(keyCode)) continue;
             if (button->IsUp()) { state.up(); continue; }
             if (!button->IsDown()) continue;
@@ -93,5 +100,15 @@ bool consume(RE::StaticFunctionTag*, std::int32_t token)
 {
     std::scoped_lock lock(mutex);
     return available && state.consume(static_cast<std::uint32_t>(token), hotkey::State::Clock::now());
+}
+void recover(RE::StaticFunctionTag*)
+{
+    std::scoped_lock lock(mutex);
+    const unsigned scan = (keyCode & 0x7f) | ((keyCode & 0x80) ? 0xe000 : 0);
+    const auto virtualKey = MapVirtualKeyW(scan, MAPVK_VSC_TO_VK_EX);
+    if (virtualKey && !(GetAsyncKeyState(virtualKey) & 0x8000)) {
+        keys[keyCode] = false;
+        state.up();
+    }
 }
 }

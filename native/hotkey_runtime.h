@@ -6,4 +6,5 @@ void initialize();
 void configure(RE::StaticFunctionTag*, std::int32_t key, std::int32_t modifiers);
 void ready(RE::StaticFunctionTag*, bool value, std::int32_t view);
 bool consume(RE::StaticFunctionTag*, std::int32_t token);
+void recover(RE::StaticFunctionTag*);
 }

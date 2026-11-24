@@ -151,6 +151,9 @@ Function ServiceCatalog()
         return
     endif
     _serviceBusy = true
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.RecoverHotkey()
+    endif
     if _viewId == 0
         Connect()
     endif
