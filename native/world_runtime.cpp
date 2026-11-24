@@ -40,6 +40,7 @@ struct LocationProbe {
 };
 std::optional<LocationProbe> locationProbe;
 std::atomic_bool locationProbeRequested{false};
+std::atomic_bool locationProbePending{false};
 
 void probeLocations(RE::PlayerCharacter* player, std::uint64_t request)
 {
@@ -226,6 +227,18 @@ void diagnoseLocations(RE::StaticFunctionTag*)
 {
     locationProbeRequested=true;
 }
+void stepLocationProbe(RE::StaticFunctionTag*)
+{
+    if (!locationProbeRequested.load() || locationProbePending.exchange(true)) return;
+    const auto request=session.load();
+    SKSE::GetTaskInterface()->AddTask([request] {
+        if (request==session.load() && locationProbeRequested.load()) {
+            probeLocations(RE::PlayerCharacter::GetSingleton(),request);
+            if (!locationProbe) locationProbeRequested=false;
+        }
+        locationProbePending=false;
+    });
+}
 std::int32_t nextTrackingRequest(RE::StaticFunctionTag*)
 {
     auto value=++trackingSerial;
@@ -286,10 +299,6 @@ void refresh(RE::StaticFunctionTag*)
         const auto started=std::chrono::steady_clock::now();
         auto player=RE::PlayerCharacter::GetSingleton(); auto processes=RE::ProcessLists::GetSingleton();
         if (!player || !processes || !player->GetParentCell()) { pending=false; return; }
-        if (locationProbeRequested.load()) {
-            probeLocations(player,request);
-            if (!locationProbe) locationProbeRequested=false;
-        }
         updateLocations(request);
         auto cell=player->GetParentCell()->GetFormID();
         auto world=player->GetWorldspace() ? player->GetWorldspace()->GetFormID() : 0;

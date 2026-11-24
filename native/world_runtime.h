@@ -4,6 +4,7 @@ namespace nirn::world_runtime {
 void reset(RE::StaticFunctionTag*);
 void refresh(RE::StaticFunctionTag*);
 void diagnoseLocations(RE::StaticFunctionTag*);
+void stepLocationProbe(RE::StaticFunctionTag*);
 std::int32_t context(RE::StaticFunctionTag*);
 std::int32_t revision(RE::StaticFunctionTag*);
 std::int32_t count(RE::StaticFunctionTag*);

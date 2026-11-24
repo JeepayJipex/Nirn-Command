@@ -166,6 +166,9 @@ Function ServiceCatalog()
         _worldRefreshedInPalette = false
     endif
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0 && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
+        if !ownPalette
+            NirnCommandNative.StepLocationProbe()
+        endif
         if (ownPalette && !_worldRefreshedInPalette) || (!ownPalette && now - _lastWorldRefresh >= 2.0)
             _lastWorldRefresh = now
             if ownPalette
