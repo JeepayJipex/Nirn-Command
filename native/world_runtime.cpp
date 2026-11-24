@@ -269,8 +269,8 @@ void save(SKSE::SerializationInterface* intfc)
 }
 void revert(SKSE::SerializationInterface*)
 {
-    ++session;
     std::scoped_lock lock(mutex);
+    ++session;
     cancelMap("save boundary");
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
@@ -334,9 +334,9 @@ std::string detail(RE::Actor* actor, RE::PlayerCharacter* player, float distance
 }
 void reset(RE::StaticFunctionTag*)
 {
-    ++session;
     locationProbeRequested=false;
     std::scoped_lock lock(mutex);
+    ++session;
     cancelMap("world reset");
     knownLocations.clear();
     knownLocationIds.clear();
@@ -555,6 +555,7 @@ std::int32_t stepMap(RE::StaticFunctionTag*, std::int32_t requestId)
     SKSE::GetTaskInterface()->AddTask([serial] {
         std::scoped_lock lock(mutex);
         if (!mapRequest || mapRequest->serial!=serial) return;
+        if (!mapRequest->handle) { mapRequest->checkPending=false; return; }
         auto ref=RE::TESForm::LookupByID<RE::TESObjectREFR>(mapRequest->form);
         if (!knownLocations.contains(mapRequest->form) || locationRow(ref).empty() || ref->GetHandle().native_handle()!=mapRequest->handle) {
             cancelMap("reference invalidated"); return;
@@ -563,26 +564,25 @@ std::int32_t stepMap(RE::StaticFunctionTag*, std::int32_t requestId)
             std::scoped_lock lock(mutex);
             if (!mapRequest || mapRequest->serial!=serial || mapRequest->saveSession!=session.load()) return;
             mapRequest->checkPending=false;
-            if (std::chrono::steady_clock::now()>=mapRequest->deadline) { cancelMap("readiness timeout; general map"); return; }
             auto ui=RE::UI::GetSingleton();
-            if (!mapRequest->opened) return;
-            if (!ui || !ui->IsMenuOpen("MapMenu")) { cancelMap("map closed"); return; }
-            auto menu=ui->GetMenu<RE::MapMenu>();
-            auto movie=ui->GetMovieView("MapMenu");
-            if (!menu || !movie) return;
-            auto data=menu->GetRuntimeData2();
-            if (!data || !data->controlsReady || !data->worldSpace || !movie->IsAvailable("_global.skse.ShowOnMap")) return;
-            if (!mapRequest->world || data->worldSpace->GetFormID()!=mapRequest->world) { cancelMap("unsupported worldspace; general map"); return; }
+            const bool menuOpen=ui && ui->IsMenuOpen("MapMenu");
+            auto menu=menuOpen ? ui->GetMenu<RE::MapMenu>() : nullptr;
+            auto movie=menuOpen ? ui->GetMovieView("MapMenu") : nullptr;
+            auto data=menu ? menu->GetRuntimeData2() : nullptr;
+            const bool ready=data && data->controlsReady && data->worldSpace && movie && movie->IsAvailable("_global.skse.ShowOnMap");
+            const bool sameWorld=ready && mapRequest->world && data->worldSpace->GetFormID()==mapRequest->world;
+            const auto readiness=nirn::world::mapReadiness(true,true,std::chrono::steady_clock::now()>=mapRequest->deadline,
+                mapRequest->opened,menuOpen,ready,sameWorld);
+            if (readiness==nirn::world::MapReadiness::wait) return;
+            if (readiness==nirn::world::MapReadiness::cancel) { cancelMap("map closed"); return; }
+            if (readiness==nirn::world::MapReadiness::fallback) { cancelMap("timeout or unsupported worldspace; general map"); return; }
             const auto& markers=data->mapMarkers;
             if (markers.size()>8192) { cancelMap("marker limit; general map"); return; }
-            std::size_t matches=0, index=0;
-            for (std::size_t i=0;i<markers.size();++i) {
-                if (markers[i].ref==mapRequest->handle) { ++matches; index=i; }
-            }
-            if (!matches) return;
-            SKSE::log::info("Map request={} menu ready matches={} index={}",serial,matches,index);
-            if (matches!=1) { cancelMap("ambiguous marker; general map"); return; }
-            RE::GFxValue argument(static_cast<double>(index));
+            auto match=nirn::world::matchMapMarker(markers,mapRequest->handle);
+            if (!match.count) return;
+            SKSE::log::info("Map request={} menu ready matches={} index={}",serial,match.count,match.index);
+            if (match.count!=1) { cancelMap("ambiguous marker; general map"); return; }
+            RE::GFxValue argument(static_cast<double>(match.index));
             const bool invoked=movie->Invoke("_global.skse.ShowOnMap",nullptr,&argument,1);
             SKSE::log::info("Map request={} positioning invocation={} camera movement unverified",serial,invoked);
             cancelMap(invoked ? "invoked" : "handler unavailable; general map");

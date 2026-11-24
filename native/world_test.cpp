@@ -4,6 +4,24 @@
 int main()
 {
     using namespace nirn::world;
+    if (mapReadiness(true,true,false,false,false,false,false)!=MapReadiness::wait ||
+        mapReadiness(true,true,false,true,true,false,false)!=MapReadiness::wait ||
+        mapReadiness(true,true,true,true,true,false,false)!=MapReadiness::fallback ||
+        mapReadiness(true,true,false,true,false,false,false)!=MapReadiness::cancel ||
+        mapReadiness(false,true,false,true,true,true,true)!=MapReadiness::cancel ||
+        mapReadiness(true,false,false,true,true,true,true)!=MapReadiness::cancel ||
+        mapReadiness(true,true,false,true,true,true,false)!=MapReadiness::fallback ||
+        mapReadiness(true,true,false,true,true,true,true)!=MapReadiness::match)
+        throw std::runtime_error("map lifecycle failed");
+    struct Marker { std::uint32_t ref; };
+    std::vector<Marker> markers{{4},{9},{7}};
+    auto match=matchMapMarker(markers,9u);
+    if (match.count!=1 || match.index!=1) throw std::runtime_error("map marker match failed");
+    if (matchMapMarker(markers,0u).count || matchMapMarker(markers,5u).count) throw std::runtime_error("missing marker matched");
+    markers.push_back({9});
+    if (matchMapMarker(markers,9u).count!=2) throw std::runtime_error("duplicate marker accepted");
+    markers={{9},{4}};
+    if (matchMapMarker(markers,9u).index!=0) throw std::runtime_error("marker order reused");
     if (!eligibleLocation(42,true,true,true) || eligibleLocation(0,true,true,true) ||
         eligibleLocation(42,false,true,true) || eligibleLocation(42,true,false,true) ||
         eligibleLocation(42,true,true,false)) throw std::runtime_error("location eligibility failed");

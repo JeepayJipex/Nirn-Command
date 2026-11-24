@@ -8,6 +8,30 @@
 #include <vector>
 
 namespace nirn::world {
+enum class MapReadiness { wait, cancel, fallback, match };
+inline MapReadiness mapReadiness(bool currentRequest, bool sameSave, bool timedOut,
+    bool opened, bool menuOpen, bool ready, bool sameWorld)
+{
+    if (!currentRequest || !sameSave) return MapReadiness::cancel;
+    if (timedOut) return MapReadiness::fallback;
+    if (!opened) return MapReadiness::wait;
+    if (!menuOpen) return MapReadiness::cancel;
+    if (!ready) return MapReadiness::wait;
+    return sameWorld ? MapReadiness::match : MapReadiness::fallback;
+}
+struct MapMatch {
+    std::size_t count{}, index{};
+};
+template <class Markers, class Handle>
+MapMatch matchMapMarker(const Markers& markers, Handle handle)
+{
+    MapMatch match;
+    if (!handle) return match;
+    for (std::size_t i=0; i<markers.size(); ++i) {
+        if (markers[i].ref==handle) { ++match.count; match.index=i; }
+    }
+    return match;
+}
 inline bool eligibleLocation(std::uint32_t id, bool enabled, bool visible, bool named)
 {
     return id && enabled && visible && named;

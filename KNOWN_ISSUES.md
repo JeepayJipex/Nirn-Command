@@ -1,5 +1,9 @@
 # Known issues and verification limits
 
+## v0.5C.3 map actions
+
+- Precise positioning and fallback behavior have not yet been verified in Skyrim. The active map replacement and worldspace can affect support. See `docs/map-actions-test.md` for the primary gameplay test and diagnostics.
+
 - This version has not been run in Skyrim. Startup, input focus, simulated shortcuts, native API calls, persistence and save transitions remain unverified in game.
 - The native DLL is intended for SE 1.5.97 and AE 1.6.1170. Automated compilation cannot establish runtime compatibility with either executable or a particular mod list.
 - Discovery covers known native integrations and declared MCM Helper bindings. It cannot enumerate every Papyrus or SKSE shortcut, prove that a configuration was loaded, or guarantee simulated keys are received.
