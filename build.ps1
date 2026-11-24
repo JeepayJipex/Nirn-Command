@@ -12,6 +12,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Category tests failed' }
 if ($LASTEXITCODE -ne 0) { throw 'World catalog tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/tracking-ui.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Tracking UI tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/tracking-lifecycle.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Tracking lifecycle tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/palette.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Palette tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/editor.test.js')
