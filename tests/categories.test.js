@@ -2,8 +2,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 class El {constructor(){this.children=[];this.listeners={};this.value='';this._text='';this.classList={toggle(){}};this.attrs={};}set textContent(v){this._text=String(v);this.children=[]}get textContent(){return this._text}append(...x){this.children.push(...x)}appendChild(x){if(x.fragment)this.children.push(...x.children);else this.children.push(x)}setAttribute(k,v){this.attrs[k]=v}addEventListener(k,f){this.listeners[k]=f}scrollIntoView(){}focus(){this.focused=true}}
 const input=new El(),results=new El(),categories=new El(),meta=new El(),status=new El(),handlers={};
 const document={querySelector:s=>({'#query':input,'#results':results,'#categories':categories,'#meta':meta,'#status':status})[s],createElement:()=>new El(),createDocumentFragment:()=>Object.assign(new El(),{fragment:true}),addEventListener:(k,f)=>handlers[k]=f};
-const sent=[], timers=[];
-const window={magelight:{send:(...args)=>sent.push(args),on(){}},NIRN_COMMANDS:[{id:'builtin:one',label:'Test action',kind:'Console',action:'console:tgm'}],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[]};
+const sent=[], timers=[], bridgeEvents={};
+const window={magelight:{send:(...args)=>sent.push(args),on:(name,fn)=>{bridgeEvents[name]=fn;}},NIRN_COMMANDS:[{id:'builtin:one',label:'Test action',kind:'Console',action:'console:tgm'}],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[]};
 vm.runInNewContext(fs.readFileSync('Magelight/NirnCommand/views/palette/search.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/world-catalog.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),{window,document,localStorage:{getItem(){return null},setItem(){},removeItem(){}},console,requestAnimationFrame:f=>f(),setTimeout:(fn,ms)=>timers.push({fn,ms}),Date,Map,Set});
 const key=(key,extra={})=>{let prevented=false;handlers.keydown({key,code:key,preventDefault(){prevented=true},...extra});return prevented};
 window.ncCatalogBegin('1');window.ncAddEntry('item|1:0|game:item:x:1|Iron Sword');window.ncAddEntry('spell|1:1|game:spell:x:2|Fast Healing');window.ncCatalogComplete('1');
@@ -35,6 +35,8 @@ window.ncWorldEntry('save-one|1|npc|1|1|1|'+JSON.stringify({id:'npc:2',token:'2'
 window.ncWorldComplete('save-one|1|npc|1|1');
 categories.children[4].listeners.click(); input.value=''; input.listeners.input();
 assert.equal(results.children.length,2); assert.equal(results.children[0].children[1].children[1].textContent,'25 units · left');
+key('Enter'); bridgeEvents.__uimode('0'); categories.children[4].listeners.click();
+assert.equal(results.children[0].children[1].children[1].textContent,'25 units · left');
 key('Enter');
 let msg=sent.at(-1)[1].split('|'); assert.equal(msg[0],'inspect');
 window.ncWorldInspect('save-one|1|npc|2|'+msg[5]+'|'+JSON.stringify({available:false}));
