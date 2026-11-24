@@ -53,7 +53,4 @@ footer span { display:flex; gap:5px; align-items:center; }
 .categories button:hover { color:#fff; }
 
 .label mark { color:#f5d59a; background:transparent; font-weight:700; }
-.world-title { padding:20px 20px 6px; color:#f2d29e; font-size:18px; }
-.world-description { padding:6px 20px 18px; color:#d5d1ca; white-space:pre-line; }
-#results > button { margin:0 0 18px 20px; padding:8px 12px; border:1px solid #786546; border-radius:5px; background:#35302d; color:#f2d29e; cursor:pointer; }
 .favorite:disabled { visibility:hidden; }

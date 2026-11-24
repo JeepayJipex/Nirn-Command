@@ -38,6 +38,7 @@ int _worldContext
 int _worldRevision
 int _locationRevision
 bool _worldSending
+bool _worldInspectBusy
 int _worldAttempt
 int _npcAttempt
 int _locationAttempt
@@ -67,6 +68,7 @@ Function Setup()
     _worldRevision = 0
     _locationRevision = 0
     _worldSending = false
+    _worldInspectBusy = false
     _lastWorldRefresh = 0.0
     _worldRefreshedInPalette = false
     _npcSentAt = 0.0
@@ -714,11 +716,22 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     if _worldContext < 1 || StringUtil.Find(payload, prefix) != 0
         return
     endif
-    string tokenText = StringUtil.Substring(payload, StringUtil.GetLength(prefix))
+    string tokenAndRequest = StringUtil.Substring(payload, StringUtil.GetLength(prefix))
+    int requestSplit = StringUtil.Find(tokenAndRequest, "|")
+    if requestSplit < 1
+        return
+    endif
+    string tokenText = StringUtil.Substring(tokenAndRequest, 0, requestSplit)
+    string worldRequest = StringUtil.Substring(tokenAndRequest, requestSplit + 1)
     int token = tokenText as int
     if token == 0
         return
     endif
+    if _worldInspectBusy
+        Magelight.Call(_viewId, "ncWorldInspect", _catalogSession + "|" + _worldContext + "|" + kind + "|" + tokenText + "|" + worldRequest + "|{\"available\":false}")
+        return
+    endif
+    _worldInspectBusy = true
     int context = _worldContext
     int view = _viewId
     int viewGeneration = _viewGeneration
@@ -743,7 +756,10 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
         if result == ""
             result = "{\"available\":false}"
         endif
-        Magelight.Call(view, "ncWorldInspect", session + "|" + context + "|" + kind + "|" + tokenText + "|" + result)
+        Magelight.Call(view, "ncWorldInspect", session + "|" + context + "|" + kind + "|" + tokenText + "|" + worldRequest + "|" + result)
+    endif
+    if viewGeneration == _viewGeneration
+        _worldInspectBusy = false
     endif
 EndEvent
 

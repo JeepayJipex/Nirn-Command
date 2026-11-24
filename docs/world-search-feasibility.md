@@ -34,8 +34,33 @@ at most 256 actors and contains only high-process actors with a loaded 3D model.
 Each refresh examines at most 1024 high-process actors; the native log reports
 when this bound is reached. Results prioritize the closest actors examined.
 
+## Candidates for a later iteration
+
+Temporary NPC tracking could use a dedicated quest objective and an optional
+reference alias. Papyrus exposes `ForceRefTo`, `SetObjectiveDisplayed` and
+`Clear`. A future prototype must test journal and compass effects, cleanup on
+cancel, expiry and save reload, and behavior when an actor dies or unloads.
+Compass replacements may alter the displayed marker.
+
+SKSE's Scaleform `ShowOnMap` takes an index into the currently open map menu's
+marker list. A focused map action needs to wait for that list and resolve the
+selected reference to its current index. Worldspace changes, missing markers and
+replacement map menus require testing. The existing general-map action remains
+the fallback when a specific marker cannot be selected reliably.
+
+The player's current marker list supplies candidate references for a future
+import of prior discoveries. Marker visibility and fast-travel flags do not
+establish discovery on their own. A future import needs per-save discovery
+evidence, stable reference remapping and bounded enumeration before it can
+include earlier vanilla or mod-added markers safely.
+
+References: [SKSE map implementation](https://github.com/ianpatt/skse64/blob/master/skse64/Hooks_Scaleform.cpp#L775-L812),
+[Creation Kit alias scripts](https://github.com/ianpatt/skse64/blob/master/scripts/vanilla/ReferenceAlias.psc),
+and the CommonLib sources below.
+
 Sources: [ProcessLists.cpp](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/src/RE/P/ProcessLists.cpp),
 [LocationDiscovery.h](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/L/LocationDiscovery.h),
 [ExtraMapMarker.h](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/E/ExtraMapMarker.h),
 [PlayerCharacter.h](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/P/PlayerCharacter.h).
+
 

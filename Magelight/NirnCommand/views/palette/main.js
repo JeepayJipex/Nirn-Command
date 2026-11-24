@@ -175,7 +175,13 @@
   const normalize=window.NirnSearch.normalize, searchIndex=window.NirnSearch.create();
   const categories=['All','Actions','Items','Spells','NPCs','Locations'];
   const worldCatalog=window.NirnWorldCatalog?.create();
-  let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldDetail=null;
+  let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldRequest=null;
+  function cancelWorldRequest() {
+    if (!worldRequest) return;
+    const item=[...worldNpcs,...worldLocations].find(entry=>entry.id===worldRequest.id);
+    if (item && item.worldStatus==='Checking reference…') delete item.worldStatus;
+    worldRequest=null;
+  }
   let category='All', indexedStatics=false, indexedCommands=null, indexedCatalog=null;
   let indexedDiscovery=null, indexedOverrides=null, effectiveDiscovery=[];
   function eligible(entry) {return (category==='All' || category===({Item:'Items',Spell:'Spells',NPC:'NPCs',Location:'Locations'}[entry.kind] || 'Actions')) && (settings.showUnavailable!==false || available(entry));}
@@ -191,12 +197,7 @@
       searchIndex.replace('providers',effectiveDiscovery);
     }
   }
-  function dismissWorldDetail() {
-    if (!worldDetail) return;
-    worldDetail=null;
-    if(bridge) bridge.send('__escapecapture','0');
-  }
-  function setCategory(next){dismissWorldDetail();category=next;selected=0;results=[];render();input.focus();}
+  function setCategory(next){cancelWorldRequest();category=next;selected=0;results=[];render();input.focus();}
   const categoryEl=document.querySelector('#categories');
   if(categoryEl) categories.forEach(name=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('mousedown',event=>event.preventDefault());button.addEventListener('click',()=>setCategory(name));categoryEl.appendChild(button);});
   function getResults() {
@@ -233,7 +234,6 @@
     let start=0;while(start<text.length){let end=start+1;while(end<text.length && marked[end]===marked[start])end++;const part=text.slice(start,end);if(marked[start]){const mark=document.createElement('mark');mark.textContent=part;label.appendChild(mark);}else label.appendChild(document.createTextNode(part));start=end;}
   }
   function render() {
-    if(worldDetail) { renderWorldDetail(); return; }
     const previous=results[selected]?.id; results=getResults();
     const retained=previous ? results.findIndex(e=>e.id===previous) : -1; selected=retained>=0?retained:0;
     if(categoryEl) Array.from(categoryEl.children).forEach((button,i)=>{button.classList.toggle('active',categories[i]===category);button.setAttribute('aria-pressed',String(categories[i]===category));});
@@ -245,16 +245,17 @@
       const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
       const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧',NPC:'♙',Location:'⌖'})[entry.kind] || '✦';
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; highlight(label,entry.label,input.value);
-      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : unavailableReason(entry); info.append(label,detail);
+      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=entry.worldStatus || (available(entry) ? (entry.detail || '') : unavailableReason(entry)); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
-      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind || '';
+      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind==='Location'?'Open general map':entry.kind || '';
       if(entry.transient) star.disabled=true;
       row.append(icon,info,star,kind);
       row.addEventListener('mouseenter',() => {
+        if(selected!==i) cancelWorldRequest();
         selected=i;
         Array.from(resultsEl.children).forEach((node,index)=>{node.classList.toggle('selected',index===i);node.setAttribute('aria-selected',String(index===i));});
       });
-      row.addEventListener('click',() => execute(entry)); frag.appendChild(row);
+      row.addEventListener('click',() => {if(selected!==i) cancelWorldRequest(); selected=i; execute(entry);}); frag.appendChild(row);
     });
     resultsEl.appendChild(frag); resultsEl.children[selected]?.scrollIntoView({block:'nearest'});
   }
@@ -262,27 +263,15 @@
     if (!entry || entry.transient || !entry.persistent && /^(item|spell):/.test(entry.action)) { statusEl.textContent='This action cannot be saved'; return; }
     favorites = favorites.includes(entry.id) ? favorites.filter(id => id !== entry.id) : [entry.id,...favorites]; save('favorites',favorites); render();
   }
-  function backFromWorldDetail() {
-    dismissWorldDetail();
-    render(); input.focus();
-  }
-  function renderWorldDetail() {
-    resultsEl.textContent=''; metaEl.textContent=worldDetail.kind.toUpperCase()+' DETAILS';
-    const title=document.createElement('div'); title.className='world-title'; title.textContent=worldDetail.label;
-    const description=document.createElement('div'); description.className='world-description';
-    description.textContent=worldDetail.checking ? (worldDetail.detail || 'Checking reference…') : worldDetail.unavailable ? 'This reference is temporarily unavailable.' : (worldDetail.detail || 'Details unavailable.');
-    const back=document.createElement('button'); back.type='button'; back.textContent='Back to search'; back.addEventListener('click',backFromWorldDetail);
-    resultsEl.append(title,description,back);
-    if(worldDetail.kind==='Location' && !worldDetail.unavailable && !worldDetail.checking) {
-      const map=document.createElement('button'); map.type='button'; map.textContent='Open general map';
-      map.addEventListener('click',()=>{if(bridge) bridge.send('world',`map|${catalogSession}|${worldContext}|${worldDetail.token}`);});
-      resultsEl.appendChild(map);
-    }
-  }
   function execute(entry, left=false) {
     if(entry && (entry.kind==='NPC' || entry.kind==='Location')) {
-      worldDetail={...entry,checking:true}; renderWorldDetail();
-      if(bridge) {bridge.send('__escapecapture','1'); bridge.send('world',`inspect|${catalogSession}|${worldContext}|${entry.kind.toLowerCase()}|${entry.token}`);}
+      if (!bridge) {statusEl.textContent='Bridge unavailable';return;}
+      cancelWorldRequest();
+      const request=String(++serial), kind=entry.kind.toLowerCase();
+      worldRequest={request,kind,token:String(entry.token),id:entry.id,session:catalogSession,context:worldContext};
+      entry.worldStatus='Checking reference…'; render();
+      bridge.send('world',`inspect|${catalogSession}|${worldContext}|${kind}|${entry.token}|${request}`);
+      setTimeout(()=>{if(worldRequest?.request===request){worldRequest=null;entry.worldStatus='Validation timed out';render();}},5000);
       return;
     }
     if (entry?.action === 'local:clear-history' || entry?.action === 'local:clear-favorites') {
@@ -332,12 +321,12 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldDetail=null; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncWorldContext = function(payload) {
     const [session,context]=String(payload).split('|');
     const revision=Number(context);
     if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
-    worldContext=context; worldNpcs=[]; worldLocations=[]; worldDetail=null; worldCatalog.reset(session,context); render();
+    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog.reset(session,context); render();
   };
   window.ncWorldBegin = function(payload) {
     const [session,context,kind,generation,attempt,count]=String(payload).split('|');
@@ -362,11 +351,15 @@
   };
   window.ncWorldInspect = function(payload) {
     try {
-      const [session,context,kind,token,...rest]=String(payload).split('|');
-      if(session!==catalogSession || context!==worldContext || !worldDetail || kind!==worldDetail.kind.toLowerCase() || token!==String(worldDetail.token)) return;
-      const result=JSON.parse(rest.join('|'));
-      worldDetail={...worldDetail,checking:false,unavailable:result.available!==true,detail:typeof result.detail==='string'?result.detail:worldDetail.detail};
-      renderWorldDetail();
+      const [session,context,rawKind,token,request,...rest]=String(payload).split('|');
+      const kind=String(rawKind || '').toLowerCase();
+      const current=worldRequest;
+      if(!current || session!==catalogSession || context!==worldContext || session!==current.session || context!==current.context || kind!==current.kind || token!==current.token || request!==current.request) return;
+      const result=JSON.parse(rest.join('|')), entry=results.find(item=>item.id===current.id);
+      worldRequest=null; if(!entry) return;
+      entry.worldStatus=result.available===true ? (typeof result.detail==='string' ? result.detail : entry.detail) : 'Temporarily unavailable';
+      render();
+      if(result.available===true && kind==='location' && bridge) bridge.send('world',`map|${session}|${context}|${token}`);
     } catch (_) {}
   };
   window.ncBridgeReady = function() {
@@ -465,7 +458,7 @@
     incoming.push({id:id || `session:${type}:${token}`, persistent:!!id, label:name, kind:type==='item'?'Item':'Spell',detail:type==='item'?'Inventory · equip or consume':'Known spell · right hand',action:`${type}:${token}`});
     if (!queued) { queued=true; requestAnimationFrame(()=>{queued=false; statusEl.textContent=`Loading ${incoming.length} entries`;}); }
   };
-  input.addEventListener('input',()=>{dismissWorldDetail();selected=0;results=[];render();});
+  input.addEventListener('input',()=>{cancelWorldRequest();selected=0;results=[];render();});
   let heldModifiers=0;
   const modifierBits={ShiftLeft:1,ShiftRight:2,ControlLeft:4,ControlRight:8,AltLeft:16,AltRight:32};
   document.addEventListener('keydown',event=>{
@@ -473,13 +466,9 @@
     if (event.isComposing || event.keyCode===229) return;
     if (modifierBits[event.code]) heldModifiers |= modifierBits[event.code];
     if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('execute',`${++serial}|hotkey:close`); return;}
-    if (worldDetail) {
-      if(event.key==='Escape') {event.preventDefault();backFromWorldDetail(); return;}
-      if(event.key!=='Tab' || event.ctrlKey || event.altKey || event.metaKey) return;
-    }
     if(event.key==='Tab' && !event.ctrlKey && !event.altKey && !event.metaKey){event.preventDefault();setCategory(categories[(categories.indexOf(category)+(event.shiftKey?-1:1)+categories.length)%categories.length]);}
     else if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
-    else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
+    else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); cancelWorldRequest(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
     else if (event.key==='Enter' || event.code==='NumpadEnter') {event.preventDefault();execute(results[selected],event.ctrlKey);}
   },true);
   document.addEventListener('keyup',event=>{ if(editor?.isOpen()) editor.keyup(event); if(modifierBits[event.code]) heldModifiers &= ~modifierBits[event.code]; },true);
@@ -500,6 +489,6 @@
     if (bridge && catalogSession) bridge.send('catalog','tick|'+catalogSession);
     setTimeout(()=>heartbeat(serial),1000);
   }
-  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; worldDetail=null; if(editor?.isOpen()) editor.hide();} });
+  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; worldRequest=null; if(editor?.isOpen()) editor.hide();} });
   render();
 })();

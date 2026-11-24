@@ -14,13 +14,13 @@ Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Item
 
 ## World search review
 
-The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Select one to inspect its approximate distance, direction and available location. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
+The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Results show approximate distance, direction and available location. Activate a result to revalidate it in place. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
 
 The Locations category shows up to eight recorded discoveries when the search is empty; type a name to search the full recorded list. It is deliberately restricted to discoveries observed after installing this version and successfully correlated to a marker reference. It does not infer discovery from a visible map marker or fast-travel availability. It stores confirmed references in the character's SKSE co-save and rechecks them after loading. Older discoveries are not imported. Correlation without opening the map, including on Solstheim and in mod-added worldspaces, needs in-game verification. If the engine's marker list does not contain a discovered marker at the event, that location is omitted and the native log records an unresolved event.
 
-Select a location to inspect its available worldspace. **Open general map** releases Nirn Command's pause and requests the normal map; it does not center the marker or start fast travel. World entries are not persisted as favorites or history.
+Location results show their available worldspace. Activate **Open general map** to validate the location, release Nirn Command's pause and request the normal map. The action does not center the marker or start fast travel. World entries are not persisted as favorites or history.
 
-For an in-game review, check: a named Whiterun NPC and its detail view; movement to another cell; loading another save; a newly discovered marker before opening the map; the absence of an undiscovered marker; Solstheim and a mod-added marker; and the map action, shortcut-only opening, pause, items and spells. Include `NirnCommandNative.log`, Papyrus and Magelight logs with the results. Compilation and automated tests do not verify these Skyrim runtime behaviors.
+For an in-game review, check NPC validation and category navigation, then activate a discovered location and confirm the palette releases its pause before the general map opens. Also check movement to another cell, loading another save, a newly discovered marker before opening the map, Solstheim and a mod-added marker, shortcut-only opening, items and spells. Include `NirnCommandNative.log`, Papyrus and Magelight logs with the results. Compilation and automated tests do not verify these Skyrim runtime behaviors.
 
 ## Actions and discovery
 
