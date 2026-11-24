@@ -16,10 +16,11 @@ const document={querySelector:s=>({'#query':input,'#results':results,'#meta':new
 const window={magelight:{send:(...args)=>sent.push(args),on:(name,fn)=>handlers[name]=fn},NIRN_COMMANDS:[],NIRN_USER_COMMANDS:[],NIRN_SCANNED_COMMANDS:[]};
 const localStorage={getItem:()=>null,setItem(){},removeItem(){}};
 const context=vm.createContext({window,document,localStorage,Set,Map,Date,console,requestAnimationFrame:fn=>fn(),setTimeout:()=>0});
-for (const file of ['world-catalog.js','search.js','main.js']) vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/'+file,'utf8'),context);
+for (const file of ['commands.js','world-catalog.js','search.js','main.js']) vm.runInContext(fs.readFileSync('Magelight/NirnCommand/views/palette/'+file,'utf8'),context);
 const search=value=>{input.value=value;input.listeners.input();};
 const enter=()=>handlers.keydown({key:'Enter',code:'Enter',ctrlKey:false,isComposing:false,preventDefault(){}});
 window.ncGameLoaded('session'); handlers.__uimode('1'); window.ncWorldContext('session|1');
+search('Diagnose Known Locations'); enter(); assert.deepEqual(sent.pop(),['world','diagnose|session']);
 window.ncWorldBegin('session|1|npc|1|1|1');
 window.ncWorldEntry('session|1|npc|1|1|0|'+JSON.stringify({id:'npc:9',token:'9',form:'4278190081',distance:12,label:'Test Actor',detail:'nearby'}));
 window.ncWorldComplete('session|1|npc|1|1');

@@ -18,6 +18,8 @@ The NPCs category searches nearby named, living humanoid actors currently proces
 
 The Locations category shows up to eight recorded discoveries when the search is empty; type a name to search the full recorded list. It is deliberately restricted to discoveries observed after installing this version and successfully correlated to a marker reference. It does not infer discovery from a visible map marker or fast-travel availability. It stores confirmed references in the character's SKSE co-save and rechecks them after loading. Older discoveries are not imported. Correlation without opening the map, including on Solstheim and in mod-added worldspaces, needs in-game verification. If the engine's marker list does not contain a discovered marker at the event, that location is omitted and the native log records an unresolved event.
 
+This review build includes a Known Locations diagnostic for testing the player's current map marker collection. See [Known Locations diagnostic](docs/known-locations-diagnostic.md) for the test procedure and coverage limitations.
+
 Location results show their available worldspace. Activate **Open general map** to validate the location, release Nirn Command's pause and request the normal map. The action does not center the marker or start fast travel. World entries are not persisted as favorites or history.
 
 See the [NPC tracking review checklist](docs/npc-tracking-review.md) for marker, replacement, save-load, unrelated quest and HUD checks, plus diagnostic instructions. Compilation and automated tests do not verify these Skyrim runtime behaviors.

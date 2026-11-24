@@ -26,6 +26,63 @@ std::unordered_map<RE::FormID,std::string> locationInspections;
 std::int32_t locationGeneration=0;
 bool locationsDirty=true;
 constexpr std::uint32_t recordType=0x4E434C31;
+constexpr std::size_t maxLocationRecordEntries=10000;
+
+// The probe keeps only an index between game-thread calls. It never holds an
+// iterator or reference into the engine's mutable marker array across frames.
+struct LocationProbe {
+    std::uint64_t sessionId{};
+    RE::FormID cell{}, world{};
+    std::size_t index{}, total{}, eligible{}, excluded{}, duplicates{};
+    std::unordered_set<RE::FormID> seen;
+    std::chrono::steady_clock::time_point started;
+    std::chrono::microseconds elapsed{}, maximumBatch{};
+};
+std::optional<LocationProbe> locationProbe;
+std::atomic_bool locationProbeRequested{false};
+
+void probeLocations(RE::PlayerCharacter* player, std::uint64_t request)
+{
+    if (!player || !player->GetParentCell() || request!=session.load()) return;
+    auto& markers=player->GetPlayerRuntimeData().currentMapMarkers;
+    const auto cell=player->GetParentCell()->GetFormID();
+    const auto world=player->GetWorldspace() ? player->GetWorldspace()->GetFormID() : 0;
+    if (!locationProbe || locationProbe->sessionId!=request || locationProbe->cell!=cell ||
+        locationProbe->world!=world || locationProbe->total!=markers.size()) {
+        locationProbe.emplace();
+        locationProbe->sessionId=request;
+        locationProbe->cell=cell;
+        locationProbe->world=world;
+        locationProbe->total=markers.size();
+        locationProbe->started=std::chrono::steady_clock::now();
+        SKSE::log::info("Known locations probe started source=currentMapMarkers world={:08X} cell={:08X} candidates={} coverage=current collection only",world,cell,markers.size());
+    }
+    auto& probe=*locationProbe;
+    const auto started=std::chrono::steady_clock::now();
+    std::size_t processed=0;
+    while (probe.index<probe.total && processed<128 &&
+           std::chrono::steady_clock::now()-started<std::chrono::milliseconds(1)) {
+        auto ref=markers[probe.index++].get();
+        ++processed;
+        if (!ref || ref->IsDeleted() || ref->IsDisabled()) { ++probe.excluded; continue; }
+        auto extra=ref->extraList.GetByType<RE::ExtraMapMarker>();
+        if (!extra || !extra->mapData || !extra->mapData->flags.any(RE::MapMarkerData::Flag::kVisible) ||
+            !extra->mapData->locationName.GetFullName() || !*extra->mapData->locationName.GetFullName()) {
+            ++probe.excluded;
+            continue;
+        }
+        if (!probe.seen.insert(ref->GetFormID()).second) { ++probe.duplicates; continue; }
+        ++probe.eligible;
+        SKSE::log::info("Known locations probe visible form={:08X} name={}",ref->GetFormID(),extra->mapData->locationName.GetFullName());
+    }
+    auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-started);
+    probe.elapsed+=elapsed;
+    probe.maximumBatch=std::max(probe.maximumBatch,elapsed);
+    if (probe.index==probe.total) {
+        SKSE::log::info("Known locations probe complete world={:08X} candidates={} eligible={} excluded={} duplicates={} enumeration_us={} max_batch_us={} wall_ms={} publication=disabled",probe.world,probe.total,probe.eligible,probe.excluded,probe.duplicates,probe.elapsed.count(),probe.maximumBatch.count(),std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-probe.started).count());
+        locationProbe.reset();
+    }
+}
 
 std::string locationRow(RE::TESObjectREFR* ref)
 {
@@ -85,7 +142,14 @@ void save(SKSE::SerializationInterface* intfc)
 {
     std::scoped_lock lock(mutex);
     std::vector<RE::FormID> ids(discoveredLocations.begin(),discoveredLocations.end());
-    if (!ids.empty() && !intfc->WriteRecord(recordType,1,ids.data(),static_cast<std::uint32_t>(ids.size()*sizeof(RE::FormID)))) SKSE::log::error("World location save failed");
+    std::sort(ids.begin(),ids.end());
+    for (std::size_t offset=0; offset<ids.size(); offset+=maxLocationRecordEntries) {
+        auto count=std::min(maxLocationRecordEntries,ids.size()-offset);
+        if (!intfc->WriteRecord(recordType,1,ids.data()+offset,static_cast<std::uint32_t>(count*sizeof(RE::FormID)))) {
+            SKSE::log::error("World location save failed offset={}",offset);
+            break;
+        }
+    }
 }
 void revert(SKSE::SerializationInterface*)
 {
@@ -94,13 +158,15 @@ void revert(SKSE::SerializationInterface*)
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
     discoveredLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+    locationProbeRequested=false;
+    SKSE::log::info("Known locations probe reset at save boundary");
 }
 void load(SKSE::SerializationInterface* intfc)
 {
     revert(intfc);
     std::uint32_t type=0,version=0,length=0;
     while (intfc->GetNextRecordInfo(type,version,length)) {
-        if (type!=recordType || version!=1 || length%sizeof(RE::FormID) || length>40000) continue;
+        if (type!=recordType || version!=1 || length%sizeof(RE::FormID) || length>maxLocationRecordEntries*sizeof(RE::FormID)) continue;
         std::vector<RE::FormID> ids(length/sizeof(RE::FormID));
         if (intfc->ReadRecordData(ids.data(),length)!=length) continue;
         std::scoped_lock lock(mutex);
@@ -151,9 +217,14 @@ std::string detail(RE::Actor* actor, RE::PlayerCharacter* player, float distance
 void reset(RE::StaticFunctionTag*)
 {
     ++session;
+    locationProbeRequested=false;
     std::scoped_lock lock(mutex);
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+}
+void diagnoseLocations(RE::StaticFunctionTag*)
+{
+    locationProbeRequested=true;
 }
 std::int32_t nextTrackingRequest(RE::StaticFunctionTag*)
 {
@@ -215,6 +286,10 @@ void refresh(RE::StaticFunctionTag*)
         const auto started=std::chrono::steady_clock::now();
         auto player=RE::PlayerCharacter::GetSingleton(); auto processes=RE::ProcessLists::GetSingleton();
         if (!player || !processes || !player->GetParentCell()) { pending=false; return; }
+        if (locationProbeRequested.load()) {
+            probeLocations(player,request);
+            if (!locationProbe) locationProbeRequested=false;
+        }
         updateLocations(request);
         auto cell=player->GetParentCell()->GetFormID();
         auto world=player->GetWorldspace() ? player->GetWorldspace()->GetFormID() : 0;

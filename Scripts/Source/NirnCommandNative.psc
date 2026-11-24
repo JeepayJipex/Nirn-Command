@@ -1,6 +1,7 @@
 Scriptname NirnCommandNative Hidden
 Function WorldReset() Global Native
 Function WorldRefresh() Global Native
+Function DiagnoseLocations() Global Native
 int Function WorldContext() Global Native
 int Function WorldRevision() Global Native
 int Function WorldCount() Global Native

@@ -7,6 +7,7 @@ window.NIRN_COMMANDS = [
   { id:'builtin:provider-commands', label:'Nirn Command — Customize provider commands', kind:'Utility', action:'local:providers', detail:'Remap, hide or restore provider commands' },
   { id:'builtin:opening-key', label:'Nirn Command — Change opening shortcut', kind:'Utility', action:'local:hotkey', detail:'Capture a keyboard combination' },
   { id:'builtin:refresh', label:'Nirn Command — Refresh catalog', kind:'Utility', action:'local:refresh' },
+  { id:'builtin:diagnose-locations', label:'Nirn Command — Diagnose Known Locations', kind:'Utility', action:'local:diagnose-locations', detail:'Write visible marker diagnostics to the native log' },
   { id:'builtin:skyrimnet:dashboard', label:'SkyrimNet — Dashboard', kind:'Mod', action:'skyrimnet:dashboard', detail:'SkyrimNet native hotkey API', keywords:'skyrimnet ai' },
   { id:'builtin:skyrimnet:gamemaster', label:'SkyrimNet — Toggle GameMaster', kind:'Mod', action:'skyrimnet:gamemaster', detail:'SkyrimNet native hotkey API', keywords:'skyrimnet ai' },
   { id:'builtin:skyrimnet:continuous', label:'SkyrimNet — Toggle Continuous Mode', kind:'Mod', action:'skyrimnet:continuous', detail:'SkyrimNet native hotkey API', keywords:'skyrimnet ai' },
