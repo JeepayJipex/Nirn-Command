@@ -12,6 +12,7 @@ jobs:
         run: |
           node tests/search.test.js
           node tests/heartbeat.test.js
+          node tests/hotkey-lifecycle.test.js
           node tests/categories.test.js
           node tests/world-catalog.test.js
           node tests/tracking-ui.test.js

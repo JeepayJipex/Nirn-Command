@@ -10,6 +10,7 @@ bool _discoverySending
 bool _discoveryRequested
 int _discoveryRevision
 bool _domReady
+bool _connecting
 bool _snapshotRequested
 bool _dirty
 bool _fullScan
@@ -29,8 +30,6 @@ int _transferEpoch
 int _transferAttempt
 int _hotkey
 int _hotkeyModifiers
-bool _keyHeld
-bool _keyArmed
 bool _serviceBusy
 float _lastWorldRefresh
 bool _worldRefreshedInPalette
@@ -73,6 +72,9 @@ Event OnPlayerLoadGame()
 EndEvent
 
 Function Setup()
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.HotkeyReady(false, 0)
+    endif
     ClosePalette()
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0
         NirnCommandNative.WorldReset()
@@ -89,6 +91,7 @@ Function Setup()
     _viewGeneration += 1
     _viewId = 0
     _domReady = false
+    _connecting = false
     _uiEpoch = 0
     _snapshotRequested = false
     _discoveryRequested = false
@@ -114,10 +117,11 @@ Function Setup()
         _hotkey = 210
         _hotkeyModifiers = 0
     endif
-    _keyHeld = false
-    _keyArmed = !Input.IsKeyPressed(_hotkey)
     _serviceBusy = false
-    RegisterForKey(_hotkey)
+    RegisterForModEvent("NirnCommand_Hotkey", "OnNativeHotkey")
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.ConfigureHotkey(_hotkey, _hotkeyModifiers)
+    endif
     RegisterForModEvent("Magelight_ViewDomReady", "OnDomReady")
     RegisterForModEvent("Magelight_UIModeExited", "OnUIModeExited")
     _dirty = true
@@ -147,8 +151,8 @@ Function ServiceCatalog()
         return
     endif
     _serviceBusy = true
-    if !_keyArmed && !Input.IsKeyPressed(_hotkey)
-        _keyArmed = true
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.RecoverHotkey()
     endif
     if _viewId == 0
         Connect()
@@ -231,7 +235,6 @@ EndEvent
 
 Event OnUIModeExited(string eventName, string strArg, float numArg, Form sender)
     if (numArg as int) == _viewId
-        _keyHeld = false
         if !Magelight.IsUIModeActive() || Magelight.GetUIModeView() != _viewId
             Magelight.ShowView(_viewId, false)
         endif
@@ -240,34 +243,51 @@ EndEvent
 
 Event OnDomReady(string eventName, string strArg, float numArg, Form sender)
     if strArg == "NirnCommand"
+        if _viewId != 0 && (numArg as int) == _viewId && !_domReady
+            Magelight.Call(_viewId, "ncBridgeReady", "")
+            return
+        endif
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+            NirnCommandNative.HotkeyReady(false, 0)
+        endif
         _viewGeneration += 1
         _domReady = false
         _viewId = 0
+        _connecting = false
         Connect()
     endif
 EndEvent
 
 Function Connect()
-    if !Magelight.IsReady()
+    if _connecting || !Magelight.IsReady()
         return
     endif
+    _connecting = true
+    int generation = _viewGeneration
     if !Magelight.RegisterMod("NirnCommand", "Nirn Command")
+        if generation == _viewGeneration
+            _connecting = false
+        endif
         return
     endif
-    _viewId = Magelight.FindView("NirnCommand", "palette")
-    if _viewId > 0
-        bool catalogReady = Magelight.RegisterListener(_viewId, "catalog")
-        bool executeReady = Magelight.RegisterListener(_viewId, "execute")
-        bool persistReady = Magelight.RegisterListener(_viewId, "persist")
-        bool hotkeyReady = Magelight.RegisterListener(_viewId, "hotkey")
-        bool commandsReady = Magelight.RegisterListener(_viewId, "commands")
-        bool overridesReady = Magelight.RegisterListener(_viewId, "overrides")
-        bool worldReady = Magelight.RegisterListener(_viewId, "world")
-        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady || !overridesReady || !worldReady
-            Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
-            _viewId = 0
+    int view = Magelight.FindView("NirnCommand", "palette")
+    if view > 0
+        bool catalogReady = Magelight.RegisterListener(view, "catalog")
+        bool executeReady = Magelight.RegisterListener(view, "execute")
+        bool persistReady = Magelight.RegisterListener(view, "persist")
+        bool hotkeyReady = Magelight.RegisterListener(view, "hotkey")
+        bool commandsReady = Magelight.RegisterListener(view, "commands")
+        bool overridesReady = Magelight.RegisterListener(view, "overrides")
+        bool worldReady = Magelight.RegisterListener(view, "world")
+        if generation != _viewGeneration
             return
         endif
+        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady || !overridesReady || !worldReady
+            Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
+            _connecting = false
+            return
+        endif
+        _viewId = view
         _catalogSession = _viewGeneration + "-" + _epoch + "-" + Utility.GetCurrentRealTime()
         _trackingLastUIRequest = 0
         _worldContext = 0
@@ -280,6 +300,9 @@ Function Connect()
         Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
         Magelight.Call(_viewId, "ncBridgeReady", "")
         Debug.Trace("[NirnCommand] Bridge ready, view " + _viewId)
+    endif
+    if generation == _viewGeneration
+        _connecting = false
     endif
 EndFunction
 
@@ -309,29 +332,6 @@ bool Function ValidHotkey(int keyCode, int modifiers)
     return ValidShortcut(keyCode, modifiers) && keyCode != 1 && keyCode != 201
 EndFunction
 
-int Function PressedModifiers()
-    int result = 0
-    if Input.IsKeyPressed(42)
-        result += 1
-    endif
-    if Input.IsKeyPressed(54)
-        result += 2
-    endif
-    if Input.IsKeyPressed(29)
-        result += 4
-    endif
-    if Input.IsKeyPressed(157)
-        result += 8
-    endif
-    if Input.IsKeyPressed(56)
-        result += 16
-    endif
-    if Input.IsKeyPressed(184)
-        result += 32
-    endif
-    return result
-EndFunction
-
 bool Function ClosePalette()
     if _viewId == 0
         return true
@@ -346,17 +346,21 @@ bool Function ClosePalette()
     return true
 EndFunction
 
-Event OnKeyDown(int keyCode)
-    if keyCode != _hotkey || _keyHeld || !_keyArmed || !Input.IsKeyPressed(keyCode)
+Event OnNativeHotkey(string eventName, string payload, float numArg, Form sender)
+    int token = payload as int
+    if SKSE.GetPluginVersion("NirnCommandNative") < 0 || !NirnCommandNative.ConsumeHotkey(token)
+        Debug.Trace("[NirnCommand] Hotkey rejected token=" + token + " reason=expired-or-stale view=" + _viewId + " ready=" + _domReady)
         return
     endif
-    _keyHeld = true
-    if PressedModifiers() != _hotkeyModifiers || _viewId == 0
+    if _viewId == 0 || !_domReady
+        Debug.Trace("[NirnCommand] Hotkey rejected token=" + token + " reason=view-unavailable view=" + _viewId + " ready=" + _domReady)
         return
     endif
     if Magelight.IsUIModeActive()
         if Magelight.GetUIModeView() == _viewId
             ClosePalette()
+        else
+            Debug.Trace("[NirnCommand] Hotkey rejected token=" + token + " reason=ui-mode-busy view=" + _viewId)
         endif
     elseif !Utility.IsInMenuMode()
         if _activeEpoch == 0 && _initialScanEarliest > Utility.GetCurrentRealTime() + 2.0
@@ -368,14 +372,11 @@ Event OnKeyDown(int keyCode)
             if !Magelight.IsUIModeActive() || Magelight.GetUIModeView() != _viewId
                 Magelight.ShowView(_viewId, false)
             endif
+        else
+            Debug.Trace("[NirnCommand] UI mode request accepted token=" + token + " view=" + _viewId)
         endif
-    endif
-EndEvent
-
-Event OnKeyUp(int keyCode, float holdTime)
-    if keyCode == _hotkey
-        _keyArmed = true
-        _keyHeld = false
+    else
+        Debug.Trace("[NirnCommand] Hotkey rejected token=" + token + " reason=menu view=" + _viewId)
     endif
 EndEvent
 
@@ -416,8 +417,7 @@ Function HandleHotkey(string payload, string request)
     UnregisterForKey(_hotkey)
     _hotkey = keyCode
     _hotkeyModifiers = modifiers
-    _keyHeld = false
-    RegisterForKey(_hotkey)
+    NirnCommandNative.ConfigureHotkey(_hotkey, _hotkeyModifiers)
     Magelight.Call(_viewId, "ncHotkey", _hotkey + "|" + _hotkeyModifiers)
     Debug.Trace("[NirnCommand] Hotkey request " + request + " saved")
     Magelight.Call(_viewId, "ncHotkeyResult", request + "|ok")
@@ -1066,6 +1066,9 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
             return
         endif
         _domReady = true
+        if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+            NirnCommandNative.HotkeyReady(true, _viewId)
+        endif
         Debug.Trace("[NirnCommand] Catalog ready session=" + _catalogSession + " epoch=" + _activeEpoch)
         SendCatalog()
         SendDiscovery()

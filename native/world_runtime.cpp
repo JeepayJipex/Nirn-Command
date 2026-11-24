@@ -1,4 +1,5 @@
 #include "world_runtime.h"
+#include "hotkey_runtime.h"
 #include "world.h"
 #include <nlohmann/json.hpp>
 #include <atomic>
@@ -293,6 +294,7 @@ void load(SKSE::SerializationInterface* intfc)
 }
 void message(SKSE::MessagingInterface::Message* msg)
 {
+    nirn::hotkey_runtime::message(msg);
     if (msg && msg->type==SKSE::MessagingInterface::kDataLoaded) {
         if (auto ui=RE::UI::GetSingleton()) ui->AddEventSink<RE::MenuOpenCloseEvent>(&mapEvents);
         if (auto source=RE::LocationDiscovery::GetEventSource()) source->AddEventSink(&discoverySink);
