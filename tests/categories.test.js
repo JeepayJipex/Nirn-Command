@@ -54,6 +54,7 @@ window.ncWorldEntry('save-two|2|location|1|1|0|'+JSON.stringify({id:'location:9'
 window.ncWorldComplete('save-two|2|location|1|1');
 categories.children[5].listeners.click(); input.value=''; input.listeners.input();
 assert.equal(results.children.length,1); assert.equal(results.children[0].children[1].children[0].textContent,'Whiterun');
+assert.equal(actionLabel.textContent,'Open map');assert.equal(leftHint.hidden,true);assert.equal(favoriteHint.hidden,true);
 input.value='white'; input.listeners.input();
 assert.equal(results.children.length,1); key('Enter'); msg=sent.at(-1)[1].split('|');
 window.ncWorldInspect('save-two|2|LOCATION|9|'+msg[5]+'|'+JSON.stringify({available:true,detail:'Skyrim'}));
