@@ -6,6 +6,8 @@ $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'Search tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/heartbeat.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Heartbeat tests failed' }
+& node (Join-Path $PSScriptRoot 'tests/hotkey-lifecycle.test.js')
+if ($LASTEXITCODE -ne 0) { throw 'Hotkey lifecycle tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/categories.test.js')
 if ($LASTEXITCODE -ne 0) { throw 'Category tests failed' }
 & node (Join-Path $PSScriptRoot 'tests/world-catalog.test.js')
