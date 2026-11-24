@@ -78,7 +78,7 @@ void probeLocations(RE::PlayerCharacter* player, std::uint64_t request)
     }
     auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-started);
     probe.elapsed+=elapsed;
-    probe.maximumBatch=std::max(probe.maximumBatch,elapsed);
+    probe.maximumBatch=(std::max)(probe.maximumBatch,elapsed);
     if (probe.index==probe.total) {
         SKSE::log::info("Known locations probe complete world={:08X} candidates={} eligible={} excluded={} duplicates={} enumeration_us={} max_batch_us={} wall_ms={} publication=disabled",probe.world,probe.total,probe.eligible,probe.excluded,probe.duplicates,probe.elapsed.count(),probe.maximumBatch.count(),std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-probe.started).count());
         locationProbe.reset();
@@ -145,7 +145,7 @@ void save(SKSE::SerializationInterface* intfc)
     std::vector<RE::FormID> ids(discoveredLocations.begin(),discoveredLocations.end());
     std::sort(ids.begin(),ids.end());
     for (std::size_t offset=0; offset<ids.size(); offset+=maxLocationRecordEntries) {
-        auto count=std::min(maxLocationRecordEntries,ids.size()-offset);
+        auto count=(std::min)(maxLocationRecordEntries,ids.size()-offset);
         if (!intfc->WriteRecord(recordType,1,ids.data()+offset,static_cast<std::uint32_t>(count*sizeof(RE::FormID)))) {
             SKSE::log::error("World location save failed offset={}",offset);
             break;
