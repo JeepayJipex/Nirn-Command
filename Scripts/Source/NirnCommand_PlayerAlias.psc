@@ -678,6 +678,7 @@ Function PublishWorldNPCs()
 EndFunction
 
 Function PublishWorldLocations()
+    float publicationStarted = Utility.GetCurrentRealTime()
     int context = NirnCommandNative.WorldContext()
     int revision = NirnCommandNative.LocationRevision()
     if context < 1 || context != _worldContext || revision < 1 || revision == _locationRevision || _worldSending || Utility.GetCurrentRealTime() - _locationSentAt < 5.0
@@ -714,7 +715,7 @@ Function PublishWorldLocations()
     if i == total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.LocationRevision()
         Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|location|" + revision + "|" + attempt)
         _locationSentAt = Utility.GetCurrentRealTime()
-        Debug.Trace("[NirnCommand] World locations published context=" + context + " revision=" + revision + " entries=" + total)
+        Debug.Trace("[NirnCommand] World locations published context=" + context + " revision=" + revision + " entries=" + total + " seconds=" + (Utility.GetCurrentRealTime() - publicationStarted))
     endif
     _worldSending = false
 EndFunction
