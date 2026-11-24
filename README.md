@@ -4,7 +4,7 @@ Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with
 
 ## Installation
 
-1. Install `NirnCommand-v0.5C.2-known-locations-review.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+1. Install `NirnCommand-v0.5C.3-camera-fix.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
 2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet is optional.
 3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
@@ -20,7 +20,7 @@ The Locations category searches named map markers currently visible to the playe
 
 This review build includes a Known Locations diagnostic for testing the player's current map marker collection. See [Known Locations diagnostic](docs/known-locations-diagnostic.md) for the test procedure and coverage limitations.
 
-Location results show their available worldspace. Activate **Open general map** to validate the location, release Nirn Command's pause and request the normal map. The action does not center the marker or start fast travel. World entries are not persisted as favorites or history.
+Location results show their available worldspace. Activate **Show on map** to validate the location, release Nirn Command's pause and open the world map. When the active map supports positioning and contains one matching marker, Nirn Command requests that the map center on it. Otherwise the general map remains available. World entries are not persisted as favorites or history.
 
 See the [NPC tracking review checklist](docs/npc-tracking-review.md) for marker, replacement, save-load, unrelated quest and HUD checks, plus diagnostic instructions. Compilation and automated tests do not verify these Skyrim runtime behaviors.
 

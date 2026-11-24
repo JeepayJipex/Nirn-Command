@@ -955,7 +955,10 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
         if mapToken != 0 && ClosePalette()
             Utility.WaitMenuMode(0.1)
             if mapSession == _catalogSession && mapContext == NirnCommandNative.WorldContext()
-                NirnCommandNative.WorldOpenMap(mapToken)
+                int mapRequest = NirnCommandNative.WorldOpenMap(mapToken, mapContext)
+                while NirnCommandNative.WorldStepMap(mapRequest) == 1
+                    Utility.WaitMenuMode(0.05)
+                endwhile
             endif
         endif
         return

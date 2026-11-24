@@ -27,6 +27,38 @@ std::atomic_uint64_t locationChanges{1};
 std::vector<std::string> locationRows, locationTransfer;
 std::unordered_map<RE::FormID,std::string> locationInspections;
 std::int32_t locationGeneration=0;
+struct MapRequest {
+    std::uint32_t serial{};
+    std::uint64_t saveSession{};
+    RE::FormID form{}, world{};
+    std::uint32_t handle{};
+    std::chrono::steady_clock::time_point deadline;
+    bool opened{}, checkPending{};
+    const char* waiting="map opening";
+};
+std::optional<MapRequest> mapRequest;
+std::uint32_t mapSerial=0;
+void cancelMap(const char* reason)
+{
+    if (mapRequest) SKSE::log::info("Map request={} form={:08X} ended reason={}",mapRequest->serial,mapRequest->form,reason);
+    mapRequest.reset();
+}
+class MapEvents : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
+public:
+    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+    {
+        if (!event || event->menuName != "MapMenu") return RE::BSEventNotifyControl::kContinue;
+        std::scoped_lock lock(mutex);
+        if (mapRequest) {
+            if (event->opening) {
+                mapRequest->opened=true;
+                SKSE::log::info("Map request={} menu opened",mapRequest->serial);
+            } else if (mapRequest->opened) cancelMap("map closed");
+        }
+        return RE::BSEventNotifyControl::kContinue;
+    }
+};
+MapEvents mapEvents;
 constexpr std::uint32_t recordType=0x4E434C31;
 constexpr std::size_t maxLocationRecordEntries=10000;
 
@@ -238,8 +270,9 @@ void save(SKSE::SerializationInterface* intfc)
 }
 void revert(SKSE::SerializationInterface*)
 {
-    ++session;
     std::scoped_lock lock(mutex);
+    ++session;
+    cancelMap("save boundary");
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
     discoveredLocations.clear(); knownLocations.clear(); discoveredLocationIds.clear(); knownLocationIds.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0;
@@ -261,6 +294,7 @@ void load(SKSE::SerializationInterface* intfc)
 void message(SKSE::MessagingInterface::Message* msg)
 {
     if (msg && msg->type==SKSE::MessagingInterface::kDataLoaded) {
+        if (auto ui=RE::UI::GetSingleton()) ui->AddEventSink<RE::MenuOpenCloseEvent>(&mapEvents);
         if (auto source=RE::LocationDiscovery::GetEventSource()) source->AddEventSink(&discoverySink);
         else SKSE::log::error("World location discovery event source unavailable");
     }
@@ -301,9 +335,10 @@ std::string detail(RE::Actor* actor, RE::PlayerCharacter* player, float distance
 }
 void reset(RE::StaticFunctionTag*)
 {
-    ++session;
     locationProbeRequested=false;
     std::scoped_lock lock(mutex);
+    ++session;
+    cancelMap("world reset");
     knownLocations.clear();
     knownLocationIds.clear();
     trackingRequest=trackingStatus=0; trackingActor.reset();
@@ -476,15 +511,94 @@ RE::BSFixedString locationInspection(RE::StaticFunctionTag*,std::int32_t id)
     std::scoped_lock lock(mutex); auto it=locationInspections.find(static_cast<RE::FormID>(id));
     if(it==locationInspections.end()) return ""; auto result=it->second; locationInspections.erase(it); return result;
 }
-void openMap(RE::StaticFunctionTag*,std::int32_t id)
+std::int32_t openMap(RE::StaticFunctionTag*, std::int32_t id, std::int32_t expectedContext)
 {
-    const auto token=static_cast<RE::FormID>(id); const auto request=session.load();
-    SKSE::GetTaskInterface()->AddTask([request,token] {
-        bool known=false; {std::scoped_lock lock(mutex); known=request==session.load() && knownLocations.contains(token);}
-        if (!known || locationRow(RE::TESForm::LookupByID<RE::TESObjectREFR>(token)).empty()) return;
-        auto queue=RE::UIMessageQueue::GetSingleton();
+    const auto token=static_cast<RE::FormID>(id);
+    const auto saveSession=session.load();
+    std::uint32_t serial;
+    {
+        std::scoped_lock lock(mutex);
+        cancelMap("superseded");
+        serial=++mapSerial;
+        if (!serial) serial=++mapSerial;
+        mapRequest=MapRequest{serial,saveSession,token,0,0,std::chrono::steady_clock::now()+std::chrono::seconds(8)};
+    }
+    SKSE::log::info("Map selected request={} form={:08X}",serial,token);
+    SKSE::GetTaskInterface()->AddTask([serial,saveSession,token,expectedContext] {
+        std::scoped_lock lock(mutex);
+        if (!mapRequest || mapRequest->serial!=serial || saveSession!=session.load()) return;
+        auto ref=RE::TESForm::LookupByID<RE::TESObjectREFR>(token);
+        if (expectedContext!=contextId || !knownLocations.contains(token) || locationRow(ref).empty()) {
+            cancelMap("invalid or hidden reference"); return;
+        }
         auto ui=RE::UI::GetSingleton();
-        if (queue && ui && !ui->IsApplicationMenuOpen()) queue->AddMessage("MapMenu",RE::UI_MESSAGE_TYPE::kShow,nullptr);
+        auto queue=RE::UIMessageQueue::GetSingleton();
+        if (!ui || !queue || ui->IsApplicationMenuOpen()) { cancelMap("menu unavailable"); return; }
+        auto world=ref->GetWorldspace();
+        mapRequest->world=world ? world->GetFormID() : 0;
+        mapRequest->handle=ref->GetHandle().native_handle();
+        SKSE::log::info("Map opening request={} form={:08X}",serial,token);
+        queue->AddMessage("MapMenu",RE::UI_MESSAGE_TYPE::kShow,nullptr);
     });
+    return static_cast<std::int32_t>(serial);
+}
+std::int32_t stepMap(RE::StaticFunctionTag*, std::int32_t requestId)
+{
+    const auto serial=static_cast<std::uint32_t>(requestId);
+    {
+        std::scoped_lock lock(mutex);
+        if (!mapRequest || mapRequest->serial!=serial) return 0;
+        if (mapRequest->saveSession!=session.load()) { cancelMap("save boundary"); return 0; }
+        if (std::chrono::steady_clock::now()>=mapRequest->deadline) {
+            SKSE::log::info("Map request={} timeout waiting for {}",serial,mapRequest->waiting);
+            cancelMap("readiness timeout; general map"); return 0;
+        }
+        if (mapRequest->checkPending) return 1;
+        mapRequest->checkPending=true;
+    }
+    SKSE::GetTaskInterface()->AddTask([serial] {
+        std::scoped_lock lock(mutex);
+        if (!mapRequest || mapRequest->serial!=serial) return;
+        if (!mapRequest->handle) { mapRequest->checkPending=false; return; }
+        auto ref=RE::TESForm::LookupByID<RE::TESObjectREFR>(mapRequest->form);
+        if (!knownLocations.contains(mapRequest->form) || locationRow(ref).empty() || ref->GetHandle().native_handle()!=mapRequest->handle) {
+            cancelMap("reference invalidated"); return;
+        }
+        SKSE::GetTaskInterface()->AddUITask([serial] {
+            std::scoped_lock lock(mutex);
+            if (!mapRequest || mapRequest->serial!=serial || mapRequest->saveSession!=session.load()) return;
+            mapRequest->checkPending=false;
+            auto ui=RE::UI::GetSingleton();
+            const bool menuOpen=ui && ui->IsMenuOpen("MapMenu");
+            auto menu=menuOpen ? ui->GetMenu<RE::MapMenu>() : nullptr;
+            auto movie=menuOpen ? ui->GetMovieView("MapMenu") : nullptr;
+            auto data=menu ? menu->GetRuntimeData2() : nullptr;
+            const bool ready=data && data->controlsReady && data->worldSpace && movie && movie->IsAvailable("_global.skse.ShowOnMap");
+            const bool sameWorld=ready && mapRequest->world && data->worldSpace->GetFormID()==mapRequest->world;
+            const auto readiness=nirn::world::mapReadiness(true,true,std::chrono::steady_clock::now()>=mapRequest->deadline,
+                mapRequest->opened,menuOpen,ready,sameWorld);
+            if (readiness==nirn::world::MapReadiness::wait) {
+                mapRequest->waiting=mapRequest->opened ? "menu controls or Scaleform handler" : "map opening";
+                return;
+            }
+            if (readiness==nirn::world::MapReadiness::cancel) { cancelMap("map closed"); return; }
+            if (readiness==nirn::world::MapReadiness::fallback) { cancelMap("timeout or unsupported worldspace; general map"); return; }
+            const auto& camera=data->camera;
+            const auto state=camera.currentState.get();
+            const bool worldCamera=nirn::world::worldMapCameraReady<RE::TESCameraState>(state,camera.unk68[0].get(),camera.unk68[1].get());
+            if (!worldCamera) { mapRequest->waiting="world map camera transition"; return; }
+            const auto& markers=data->mapMarkers;
+            if (markers.size()>8192) { cancelMap("marker limit; general map"); return; }
+            auto match=nirn::world::matchMapMarker(markers,mapRequest->handle);
+            if (!match.count) { mapRequest->waiting="matching marker"; return; }
+            SKSE::log::info("Map request={} menu ready matches={} index={}",serial,match.count,match.index);
+            if (match.count!=1) { cancelMap("ambiguous marker; general map"); return; }
+            RE::GFxValue argument(static_cast<double>(match.index));
+            const bool invoked=movie->Invoke("_global.skse.ShowOnMap",nullptr,&argument,1);
+            SKSE::log::info("Map request={} positioning invocation={} camera movement unverified",serial,invoked);
+            cancelMap(invoked ? "invoked" : "handler unavailable; general map");
+        });
+    });
+    return 1;
 }
 }
