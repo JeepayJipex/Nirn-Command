@@ -256,6 +256,7 @@ namespace {
         vm->RegisterFunction("LocationInspect", "NirnCommandNative", nirn::world_runtime::inspectLocation);
         vm->RegisterFunction("LocationInspection", "NirnCommandNative", nirn::world_runtime::locationInspection);
         vm->RegisterFunction("WorldOpenMap", "NirnCommandNative", nirn::world_runtime::openMap);
+        vm->RegisterFunction("WorldStepMap", "NirnCommandNative", nirn::world_runtime::stepMap);
         vm->RegisterFunction("ResolveTrackingActor", "NirnCommandNative", nirn::world_runtime::resolveTrackingActor);
         vm->RegisterFunction("NextTrackingRequest", "NirnCommandNative", nirn::world_runtime::nextTrackingRequest);
         vm->RegisterFunction("TrackingResolutionStatus", "NirnCommandNative", nirn::world_runtime::trackingResolutionStatus);

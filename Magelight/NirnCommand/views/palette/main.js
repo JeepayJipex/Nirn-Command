@@ -258,7 +258,7 @@
     if(actionLabel && actionable) {
       if(entry.kind==='NPC') actionLabel.textContent=entry.form===trackedForm ? 'Stop tracking' : 'Track';
       else if(entry.action==='local:stop-tracking') actionLabel.textContent='Stop tracking';
-      else if(entry.kind==='Location') actionLabel.textContent='Open map';
+      else if(entry.kind==='Location') actionLabel.textContent='Show on map';
       else if(entry.kind==='Item') actionLabel.textContent='Equip or use';
       else if(entry.kind==='Spell') actionLabel.textContent='Equip';
       else actionLabel.textContent='Execute';
@@ -280,7 +280,7 @@
       const detail=document.createElement('span'); detail.className='detail'; detail.textContent=entry.worldStatus || (available(entry) ? (entry.detail || '') : unavailableReason(entry)); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
       const isTracked=entry.kind==='NPC' && entry.form===trackedForm;
-      const kind=document.createElement('span'); kind.className='kind' + (isTracked?' tracked':''); kind.textContent=isTracked?'Tracked':entry.kind==='Location'?'Open general map':entry.kind || '';
+      const kind=document.createElement('span'); kind.className='kind' + (isTracked?' tracked':''); kind.textContent=isTracked?'Tracked':entry.kind || '';
       if(entry.transient) star.disabled=true;
       row.append(icon,info,star,kind);
       row.addEventListener('mouseenter',() => {
