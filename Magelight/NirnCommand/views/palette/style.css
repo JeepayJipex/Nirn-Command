@@ -53,3 +53,4 @@ footer span { display:flex; gap:5px; align-items:center; }
 .categories button:hover { color:#fff; }
 
 .label mark { color:#f5d59a; background:transparent; font-weight:700; }
+.favorite:disabled { visibility:hidden; }

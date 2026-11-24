@@ -46,12 +46,13 @@
     const parts=new Map();
     return {
       replace(name,entries) { parts.set(name,entries.map(index)); },
-      entries() { return Array.from(parts.values()).flat(); },
+      entries(names) { return names ? names.flatMap(name=>parts.get(name) || []) : Array.from(parts.values()).flat(); },
       search(query,options={}) {
         const fav=new Set(options.favorites || []), usage=options.usage || {}, prepared={q:normalize(query),terms:words(query),cache:new Map()};
-        return this.entries().filter(x=>!options.filter || options.filter(x.entry)).map(x=>({entry:x.entry,label:x.label,rank:rank(x,prepared)})).filter(x=>x.rank>=0).sort((a,b)=>b.rank-a.rank || Number(fav.has(b.entry.id))-Number(fav.has(a.entry.id)) || (usage[b.entry.id]?.useCount||0)-(usage[a.entry.id]?.useCount||0) || (usage[b.entry.id]?.lastUsedAt||0)-(usage[a.entry.id]?.lastUsedAt||0) || a.label.localeCompare(b.label) || a.entry.id.localeCompare(b.entry.id)).slice(0,options.limit || 30).map(x=>x.entry);
+        return this.entries(options.parts).filter(x=>!options.filter || options.filter(x.entry)).map(x=>({entry:x.entry,label:x.label,rank:rank(x,prepared)})).filter(x=>x.rank>=0).sort((a,b)=>b.rank-a.rank || Number(fav.has(b.entry.id))-Number(fav.has(a.entry.id)) || (usage[b.entry.id]?.useCount||0)-(usage[a.entry.id]?.useCount||0) || (usage[b.entry.id]?.lastUsedAt||0)-(usage[a.entry.id]?.lastUsedAt||0) || Number(a.entry.kind==='NPC')-Number(b.entry.kind==='NPC') || (a.entry.kind==='NPC' && b.entry.kind==='NPC' ? (a.entry.distance-b.entry.distance)||0 : 0) || a.label.localeCompare(b.label) || a.entry.id.localeCompare(b.entry.id)).slice(0,options.limit || 30).map(x=>x.entry);
       }
     };
   }
   return {normalize,index,rank,create};
 });
+

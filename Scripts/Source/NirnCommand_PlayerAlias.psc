@@ -32,6 +32,18 @@ int _hotkeyModifiers
 bool _keyHeld
 bool _keyArmed
 bool _serviceBusy
+float _lastWorldRefresh
+bool _worldRefreshedInPalette
+int _worldContext
+int _worldRevision
+int _locationRevision
+bool _worldSending
+bool _worldInspectBusy
+int _worldAttempt
+int _npcAttempt
+int _locationAttempt
+float _npcSentAt
+float _locationSentAt
 
 Event OnInit()
     Setup()
@@ -49,6 +61,18 @@ EndEvent
 
 Function Setup()
     ClosePalette()
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.WorldReset()
+    endif
+    _worldContext = 0
+    _worldRevision = 0
+    _locationRevision = 0
+    _worldSending = false
+    _worldInspectBusy = false
+    _lastWorldRefresh = 0.0
+    _worldRefreshedInPalette = false
+    _npcSentAt = 0.0
+    _locationSentAt = 0.0
     _viewGeneration += 1
     _viewId = 0
     _domReady = false
@@ -64,6 +88,7 @@ Function Setup()
     RegisterForModEvent("Magelight_JS_hotkey", "OnHotkey")
     RegisterForModEvent("Magelight_JS_commands", "OnCommands")
     RegisterForModEvent("Magelight_JS_overrides", "OnOverrides")
+    RegisterForModEvent("Magelight_JS_world", "OnWorld")
     UnregisterForAllKeys()
     _hotkey = 210
     _hotkeyModifiers = 0
@@ -115,6 +140,22 @@ Function ServiceCatalog()
         Magelight.Call(_viewId, "ncBridgeReady", "")
     endif
     bool ownPalette = Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId && _viewId != 0
+    if !ownPalette
+        _worldRefreshedInPalette = false
+    endif
+    if SKSE.GetPluginVersion("NirnCommandNative") >= 0 && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
+        if (ownPalette && !_worldRefreshedInPalette) || (!ownPalette && now - _lastWorldRefresh >= 2.0)
+            _lastWorldRefresh = now
+            if ownPalette
+                _worldRefreshedInPalette = true
+            endif
+            NirnCommandNative.WorldRefresh()
+        endif
+        if _domReady && !_worldSending
+            PublishWorldNPCs()
+            PublishWorldLocations()
+        endif
+    endif
     if !_scanning && !_sending && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
         if _activeEpoch != 0 || now >= _initialScanEarliest
             if _dirty && now - _lastChange >= 0.5
@@ -189,12 +230,16 @@ Function Connect()
         bool hotkeyReady = Magelight.RegisterListener(_viewId, "hotkey")
         bool commandsReady = Magelight.RegisterListener(_viewId, "commands")
         bool overridesReady = Magelight.RegisterListener(_viewId, "overrides")
-        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady || !overridesReady
+        bool worldReady = Magelight.RegisterListener(_viewId, "world")
+        if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady || !overridesReady || !worldReady
             Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
             _viewId = 0
             return
         endif
         _catalogSession = _viewGeneration + "-" + _epoch + "-" + Utility.GetCurrentRealTime()
+        _worldContext = 0
+        _worldRevision = 0
+        _locationRevision = 0
         Magelight.Call(_viewId, "ncGameLoaded", _catalogSession)
         SendCapabilities()
         Magelight.BindHotkey(_viewId, 0, 0)
@@ -546,6 +591,177 @@ Function SendDiscovery()
         SendDiscovery()
     endif
 EndFunction
+
+Function PublishWorldNPCs()
+    int context = NirnCommandNative.WorldContext()
+    int revision = NirnCommandNative.WorldRevision()
+    if context < 1 || revision < 1
+        return
+    endif
+    int view = _viewId
+    int viewGeneration = _viewGeneration
+    string session = _catalogSession
+    if context != _worldContext
+        _worldContext = context
+        _worldRevision = 0
+        _locationRevision = 0
+        Magelight.Call(view, "ncWorldContext", session + "|" + context)
+    endif
+    if revision == _worldRevision || Utility.GetCurrentRealTime() - _npcSentAt < 5.0
+        return
+    endif
+    _worldSending = true
+    int total = NirnCommandNative.WorldCount()
+    if revision != NirnCommandNative.WorldRevision() || context != NirnCommandNative.WorldContext()
+        _worldSending = false
+        return
+    endif
+    _worldAttempt += 1
+    int attempt = _worldAttempt
+    _npcAttempt = attempt
+    string prefix = session + "|" + context + "|npc|" + revision + "|" + attempt + "|"
+    Magelight.Call(view, "ncWorldBegin", prefix + total)
+    int i = 0
+    while i < total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.WorldRevision()
+        string row = NirnCommandNative.WorldEntry(i)
+        if row == "" || StringUtil.GetLength(row) > 900
+            Debug.Trace("[NirnCommand] World NPC row unavailable or too long index=" + i)
+            _worldSending = false
+            return
+        endif
+        Magelight.Call(view, "ncWorldEntry", prefix + i + "|" + row)
+        i += 1
+        if i % 20 == 0
+            Utility.WaitMenuMode(0.01)
+        endif
+    endwhile
+    if i == total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.WorldRevision()
+        Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|npc|" + revision + "|" + attempt)
+        _npcSentAt = Utility.GetCurrentRealTime()
+        Debug.Trace("[NirnCommand] World NPC published context=" + context + " revision=" + revision + " entries=" + total)
+    endif
+    _worldSending = false
+EndFunction
+
+Function PublishWorldLocations()
+    int context = NirnCommandNative.WorldContext()
+    int revision = NirnCommandNative.LocationRevision()
+    if context < 1 || context != _worldContext || revision < 1 || revision == _locationRevision || _worldSending || Utility.GetCurrentRealTime() - _locationSentAt < 5.0
+        return
+    endif
+    _worldSending = true
+    int view = _viewId
+    int viewGeneration = _viewGeneration
+    string session = _catalogSession
+    int total = NirnCommandNative.LocationCount()
+    if revision != NirnCommandNative.LocationRevision()
+        _worldSending = false
+        return
+    endif
+    _worldAttempt += 1
+    int attempt = _worldAttempt
+    _locationAttempt = attempt
+    string prefix = session + "|" + context + "|location|" + revision + "|" + attempt + "|"
+    Magelight.Call(view, "ncWorldBegin", prefix + total)
+    int i = 0
+    while i < total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.LocationRevision()
+        string row = NirnCommandNative.LocationEntry(i)
+        if row == "" || StringUtil.GetLength(row) > 900
+            Debug.Trace("[NirnCommand] World location row unavailable or too long index=" + i)
+            _worldSending = false
+            return
+        endif
+        Magelight.Call(view, "ncWorldEntry", prefix + i + "|" + row)
+        i += 1
+        if i % 20 == 0
+            Utility.WaitMenuMode(0.01)
+        endif
+    endwhile
+    if i == total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.LocationRevision()
+        Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|location|" + revision + "|" + attempt)
+        _locationSentAt = Utility.GetCurrentRealTime()
+        Debug.Trace("[NirnCommand] World locations published context=" + context + " revision=" + revision + " entries=" + total)
+    endif
+    _worldSending = false
+EndFunction
+
+Event OnWorld(string eventName, string payload, float numArg, Form sender)
+    if (numArg as int) != _viewId || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
+        return
+    endif
+    string npcAck = "applied|" + _catalogSession + "|" + _worldContext + "|npc|" + NirnCommandNative.WorldRevision() + "|" + _npcAttempt
+    string locationAck = "applied|" + _catalogSession + "|" + _worldContext + "|location|" + NirnCommandNative.LocationRevision() + "|" + _locationAttempt
+    if payload == npcAck && _npcAttempt > 0
+        _worldRevision = NirnCommandNative.WorldRevision()
+        return
+    elseif payload == locationAck && _locationAttempt > 0
+        _locationRevision = NirnCommandNative.LocationRevision()
+        return
+    endif
+    string mapPrefix = "map|" + _catalogSession + "|" + _worldContext + "|"
+    if _worldContext > 0 && StringUtil.Find(payload, mapPrefix) == 0
+        int mapToken = StringUtil.Substring(payload, StringUtil.GetLength(mapPrefix)) as int
+        if mapToken != 0 && ClosePalette()
+            Utility.WaitMenuMode(0.1)
+            NirnCommandNative.WorldOpenMap(mapToken)
+        endif
+        return
+    endif
+    string prefix = "inspect|" + _catalogSession + "|" + _worldContext + "|npc|"
+    string kind = "npc"
+    if StringUtil.Find(payload, prefix) != 0
+        kind = "location"
+        prefix = "inspect|" + _catalogSession + "|" + _worldContext + "|location|"
+    endif
+    if _worldContext < 1 || StringUtil.Find(payload, prefix) != 0
+        return
+    endif
+    string tokenAndRequest = StringUtil.Substring(payload, StringUtil.GetLength(prefix))
+    int requestSplit = StringUtil.Find(tokenAndRequest, "|")
+    if requestSplit < 1
+        return
+    endif
+    string tokenText = StringUtil.Substring(tokenAndRequest, 0, requestSplit)
+    string worldRequest = StringUtil.Substring(tokenAndRequest, requestSplit + 1)
+    int token = tokenText as int
+    if token == 0
+        return
+    endif
+    if _worldInspectBusy
+        Magelight.Call(_viewId, "ncWorldInspect", _catalogSession + "|" + _worldContext + "|" + kind + "|" + tokenText + "|" + worldRequest + "|{\"available\":false}")
+        return
+    endif
+    _worldInspectBusy = true
+    int context = _worldContext
+    int view = _viewId
+    int viewGeneration = _viewGeneration
+    string session = _catalogSession
+    if kind == "npc"
+        NirnCommandNative.WorldInspect(token)
+    else
+        NirnCommandNative.LocationInspect(token)
+    endif
+    int attempts = 0
+    string result = ""
+    while attempts < 30 && result == "" && session == _catalogSession && viewGeneration == _viewGeneration && context == NirnCommandNative.WorldContext()
+        Utility.WaitMenuMode(0.05)
+        if kind == "npc"
+            result = NirnCommandNative.WorldInspection(token)
+        else
+            result = NirnCommandNative.LocationInspection(token)
+        endif
+        attempts += 1
+    endwhile
+    if session == _catalogSession && view == _viewId && viewGeneration == _viewGeneration && context == NirnCommandNative.WorldContext()
+        if result == ""
+            result = "{\"available\":false}"
+        endif
+        Magelight.Call(view, "ncWorldInspect", session + "|" + context + "|" + kind + "|" + tokenText + "|" + worldRequest + "|" + result)
+    endif
+    if viewGeneration == _viewGeneration
+        _worldInspectBusy = false
+    endif
+EndEvent
 
 Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0

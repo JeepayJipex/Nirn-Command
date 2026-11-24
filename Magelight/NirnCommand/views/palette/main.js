@@ -173,21 +173,31 @@
     return 'Unavailable: required plugin not detected.';
   }
   const normalize=window.NirnSearch.normalize, searchIndex=window.NirnSearch.create();
-  const categories=['All','Actions','Items','Spells'];
+  const categories=['All','Actions','Items','Spells','NPCs','Locations'];
+  const worldCatalog=window.NirnWorldCatalog?.create();
+  let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldRequest=null;
+  function cancelWorldRequest() {
+    if (!worldRequest) return;
+    const item=[...worldNpcs,...worldLocations].find(entry=>entry.id===worldRequest.id);
+    if (item && item.worldStatus==='Checking reference…') delete item.worldStatus;
+    worldRequest=null;
+  }
   let category='All', indexedStatics=false, indexedCommands=null, indexedCatalog=null;
   let indexedDiscovery=null, indexedOverrides=null, effectiveDiscovery=[];
-  function eligible(entry) {return (category==='All' || category===(entry.kind==='Item'?'Items':entry.kind==='Spell'?'Spells':'Actions')) && (settings.showUnavailable!==false || available(entry));}
+  function eligible(entry) {return (category==='All' || category===({Item:'Items',Spell:'Spells',NPC:'NPCs',Location:'Locations'}[entry.kind] || 'Actions')) && (settings.showUnavailable!==false || available(entry));}
   function updateIndex() {
     if(!indexedStatics){searchIndex.replace('static',statics);indexedStatics=true;}
     if(indexedCommands!==commands){searchIndex.replace('commands',commands.filter(supportedUserCommand));indexedCommands=commands;}
     if(indexedCatalog!==discovered){searchIndex.replace('catalog',discovered);indexedCatalog=discovered;}
+    if(indexedNpcs!==worldNpcs){searchIndex.replace('npcs',worldNpcs);indexedNpcs=worldNpcs;}
+    if(indexedLocations!==worldLocations){searchIndex.replace('locations',worldLocations);indexedLocations=worldLocations;}
     if(indexedDiscovery!==modDiscovered || indexedOverrides!==overrides){
       indexedDiscovery=modDiscovered;indexedOverrides=overrides;
       effectiveDiscovery=modDiscovered.filter(e=>!overrides[e.id]?.hidden).map(e=>{const o=overrides[e.id];return e.id.startsWith('provider:') && e.action.startsWith('shortcut2:') && /^shortcut2:[0-9]+:[0-9]+$/.test(o?.action||'')?{...e,action:o.action}:e;});
       searchIndex.replace('providers',effectiveDiscovery);
     }
   }
-  function setCategory(next){category=next;selected=0;results=[];render();input.focus();}
+  function setCategory(next){cancelWorldRequest();category=next;selected=0;results=[];render();input.focus();}
   const categoryEl=document.querySelector('#categories');
   if(categoryEl) categories.forEach(name=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('mousedown',event=>event.preventDefault());button.addEventListener('click',()=>setCategory(name));categoryEl.appendChild(button);});
   function getResults() {
@@ -201,9 +211,12 @@
       const entries=searchIndex.entries().map(x=>x.entry).filter(eligible), byId=new Map(entries.map(e=>[e.id,e]));
       const ordered=[...favorites.slice(0,8),...Object.keys(usage).sort((a,b)=>(usage[b].lastUsedAt||0)-(usage[a].lastUsedAt||0)).slice(0,8),...statics.map(e=>e.id),...commands.map(e=>e.id)];
       if(category==='Items'||category==='Spells') ordered.push(...entries.slice().sort((a,b)=>normalize(a.label).localeCompare(normalize(b.label))||a.id.localeCompare(b.id)).map(e=>e.id));
+      if(category==='NPCs') ordered.push(...entries.filter(e=>e.kind==='NPC').sort((a,b)=>a.distance-b.distance).slice(0,8).map(e=>e.id));
+      if(category==='Locations') ordered.push(...entries.filter(e=>e.kind==='Location').sort((a,b)=>normalize(a.label).localeCompare(normalize(b.label))||a.id.localeCompare(b.id)).slice(0,8).map(e=>e.id));
       return [...new Set(ordered)].map(id=>byId.get(id)).filter(Boolean).slice(0,20);
     }
-    return searchIndex.search(query,{favorites,usage,filter:eligible});
+    const parts=({Actions:['static','commands','providers'],Items:['catalog'],Spells:['catalog'],NPCs:['npcs'],Locations:['locations']})[category];
+    return searchIndex.search(query,{favorites,usage,filter:eligible,parts});
   }
   function highlight(label, text, query) {
     if (!document.createTextNode || query.trimStart().startsWith('>')) {label.textContent=text;return;}
@@ -230,17 +243,19 @@
     const frag = document.createDocumentFragment();
     results.forEach((entry,i) => {
       const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
-      const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧'})[entry.kind] || '✦';
+      const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧',NPC:'♙',Location:'⌖'})[entry.kind] || '✦';
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; highlight(label,entry.label,input.value);
-      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=available(entry) ? (entry.detail || '') : unavailableReason(entry); info.append(label,detail);
+      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=entry.worldStatus || (available(entry) ? (entry.detail || '') : unavailableReason(entry)); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
-      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind || '';
+      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind==='Location'?'Open general map':entry.kind || '';
+      if(entry.transient) star.disabled=true;
       row.append(icon,info,star,kind);
       row.addEventListener('mouseenter',() => {
+        if(selected!==i) cancelWorldRequest();
         selected=i;
         Array.from(resultsEl.children).forEach((node,index)=>{node.classList.toggle('selected',index===i);node.setAttribute('aria-selected',String(index===i));});
       });
-      row.addEventListener('click',() => execute(entry)); frag.appendChild(row);
+      row.addEventListener('click',() => {if(selected!==i) cancelWorldRequest(); selected=i; execute(entry);}); frag.appendChild(row);
     });
     resultsEl.appendChild(frag); resultsEl.children[selected]?.scrollIntoView({block:'nearest'});
   }
@@ -249,6 +264,16 @@
     favorites = favorites.includes(entry.id) ? favorites.filter(id => id !== entry.id) : [entry.id,...favorites]; save('favorites',favorites); render();
   }
   function execute(entry, left=false) {
+    if(entry && (entry.kind==='NPC' || entry.kind==='Location')) {
+      if (!bridge) {statusEl.textContent='Bridge unavailable';return;}
+      cancelWorldRequest();
+      const request=String(++serial), kind=entry.kind.toLowerCase();
+      worldRequest={request,kind,token:String(entry.token),id:entry.id,session:catalogSession,context:worldContext};
+      entry.worldStatus='Checking reference…'; render();
+      bridge.send('world',`inspect|${catalogSession}|${worldContext}|${kind}|${entry.token}|${request}`);
+      setTimeout(()=>{if(worldRequest?.request===request){worldRequest=null;entry.worldStatus='Validation timed out';render();}},5000);
+      return;
+    }
     if (entry?.action === 'local:clear-history' || entry?.action === 'local:clear-favorites') {
       const kind = entry.action.endsWith('history') ? 'history' : 'favorites';
       if (clearKind === kind && Date.now() - clearRequestedAt < 5000) {
@@ -296,7 +321,47 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncWorldContext = function(payload) {
+    const [session,context]=String(payload).split('|');
+    const revision=Number(context);
+    if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
+    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog.reset(session,context); render();
+  };
+  window.ncWorldBegin = function(payload) {
+    const [session,context,kind,generation,attempt,count]=String(payload).split('|');
+    const state=worldCatalog?.begin(session,context,kind,Number(generation),Number(count),Number(attempt));
+    if(state==='applied' && bridge) bridge.send('world',`applied|${session}|${context}|${kind}|${generation}|${attempt}`);
+  };
+  window.ncWorldEntry = function(payload) {
+    try {
+      const [session,context,kind,generation,attempt,index,...rest]=String(payload).split('|');
+      const row=JSON.parse(rest.join('|'));
+      if(!/^-?[0-9]+$/.test(String(row.token)) || !Number.isFinite(row.distance) && kind==='npc') return;
+      worldCatalog?.append(session,context,kind,Number(generation),Number(index),row,Number(attempt));
+    } catch (_) {}
+  };
+  window.ncWorldComplete = function(payload) {
+    const [session,context,kind,generation,attempt]=String(payload).split('|');
+    if(!worldCatalog?.complete(session,context,kind,Number(generation),Number(attempt))) return;
+    const entries=worldCatalog.entries(kind).map(row=>({...row,kind:kind==='npc'?'NPC':'Location',action:`world:${row.token}`,transient:true}));
+    if(kind==='npc') worldNpcs=entries; else worldLocations=entries;
+    render();
+    if(bridge) bridge.send('world',`applied|${session}|${context}|${kind}|${generation}|${attempt}`);
+  };
+  window.ncWorldInspect = function(payload) {
+    try {
+      const [session,context,rawKind,token,request,...rest]=String(payload).split('|');
+      const kind=String(rawKind || '').toLowerCase();
+      const current=worldRequest;
+      if(!current || session!==catalogSession || context!==worldContext || session!==current.session || context!==current.context || kind!==current.kind || token!==current.token || request!==current.request) return;
+      const result=JSON.parse(rest.join('|')), entry=results.find(item=>item.id===current.id);
+      worldRequest=null; if(!entry) return;
+      entry.worldStatus=result.available===true ? (typeof result.detail==='string' ? result.detail : entry.detail) : 'Temporarily unavailable';
+      render();
+      if(result.available===true && kind==='location' && bridge) bridge.send('world',`map|${session}|${context}|${token}`);
+    } catch (_) {}
+  };
   window.ncBridgeReady = function() {
     if(bridge) bridge.send('catalog',catalogSession?'ready|'+catalogSession:'ready');
     if (!storageAvailable && !fallbackReady && !fallbackReading && bridge) { fallbackReading=true; bridge.send('persist','read'); }
@@ -393,7 +458,7 @@
     incoming.push({id:id || `session:${type}:${token}`, persistent:!!id, label:name, kind:type==='item'?'Item':'Spell',detail:type==='item'?'Inventory · equip or consume':'Known spell · right hand',action:`${type}:${token}`});
     if (!queued) { queued=true; requestAnimationFrame(()=>{queued=false; statusEl.textContent=`Loading ${incoming.length} entries`;}); }
   };
-  input.addEventListener('input',()=>{selected=0;results=[];render();});
+  input.addEventListener('input',()=>{cancelWorldRequest();selected=0;results=[];render();});
   let heldModifiers=0;
   const modifierBits={ShiftLeft:1,ShiftRight:2,ControlLeft:4,ControlRight:8,AltLeft:16,AltRight:32};
   document.addEventListener('keydown',event=>{
@@ -403,7 +468,7 @@
     if (!event.repeat && window.NirnEditor?.codes[event.code]===openingHotkey.key && heldModifiers===openingHotkey.mask) {event.preventDefault(); if(bridge) bridge.send('execute',`${++serial}|hotkey:close`); return;}
     if(event.key==='Tab' && !event.ctrlKey && !event.altKey && !event.metaKey){event.preventDefault();setCategory(categories[(categories.indexOf(category)+(event.shiftKey?-1:1)+categories.length)%categories.length]);}
     else if (event.ctrlKey && event.key.toLowerCase()==='d') { event.preventDefault(); toggleFavorite(results[selected]); }
-    else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
+    else if (event.key==='ArrowDown' || event.key==='ArrowUp') { event.preventDefault(); cancelWorldRequest(); if (results.length) {selected=(selected+(event.key==='ArrowDown'?1:-1)+results.length)%results.length;render();} }
     else if (event.key==='Enter' || event.code==='NumpadEnter') {event.preventDefault();execute(results[selected],event.ctrlKey);}
   },true);
   document.addEventListener('keyup',event=>{ if(editor?.isOpen()) editor.keyup(event); if(modifierBits[event.code]) heldModifiers &= ~modifierBits[event.code]; },true);
@@ -424,6 +489,6 @@
     if (bridge && catalogSession) bridge.send('catalog','tick|'+catalogSession);
     setTimeout(()=>heartbeat(serial),1000);
   }
-  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; if(editor?.isOpen()) editor.hide();} });
+  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; cancelWorldRequest(); if(editor?.isOpen()) editor.hide();} });
   render();
 })();

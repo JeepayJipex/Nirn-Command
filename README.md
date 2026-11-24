@@ -4,13 +4,23 @@ Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with
 
 ## Installation
 
-1. Install `NirnCommand-v0.5.0.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+1. Install `NirnCommand-v0.5.0-world-search-review.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
 2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet is optional.
 3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
 The DLL is built for Skyrim SE 1.5.97 and AE 1.6.1170, not VR. Use matching versions of every dependency. Automated builds do not establish that this release works in a Skyrim session; runtime behavior remains unverified until played.
 
-Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Items and Spells. Search ignores accents and capitalization, accepts partial words in any order, and tolerates small typing errors.
+Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Items, Spells, NPCs and Locations. Search ignores accents and capitalization, accepts partial words in any order, and tolerates small typing errors.
+
+## World search review
+
+The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Results show approximate distance, direction and available location. Activate a result to revalidate it in place. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
+
+The Locations category shows up to eight recorded discoveries when the search is empty; type a name to search the full recorded list. It is deliberately restricted to discoveries observed after installing this version and successfully correlated to a marker reference. It does not infer discovery from a visible map marker or fast-travel availability. It stores confirmed references in the character's SKSE co-save and rechecks them after loading. Older discoveries are not imported. Correlation without opening the map, including on Solstheim and in mod-added worldspaces, needs in-game verification. If the engine's marker list does not contain a discovered marker at the event, that location is omitted and the native log records an unresolved event.
+
+Location results show their available worldspace. Activate **Open general map** to validate the location, release Nirn Command's pause and request the normal map. The action does not center the marker or start fast travel. World entries are not persisted as favorites or history.
+
+For an in-game review, check NPC validation and category navigation, then activate a discovered location and confirm the palette releases its pause before the general map opens. Also check movement to another cell, loading another save, a newly discovered marker before opening the map, Solstheim and a mod-added marker, shortcut-only opening, items and spells. Include `NirnCommandNative.log`, Papyrus and Magelight logs with the results. Compilation and automated tests do not verify these Skyrim runtime behaviors.
 
 ## Actions and discovery
 
@@ -51,3 +61,4 @@ Run `node tests/performance.js` for synthetic index and search timings. To measu
 ```
 
 The browser benchmark uses the real palette and synthetic catalogs, runs 10 warmups and 30 measured queries per size, and forces layout after each input. It does not measure painting, Skyrim, Magelight, or input-to-display latency in game.
+

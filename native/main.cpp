@@ -3,6 +3,7 @@
 #include "discovery.h"
 #include "providers.h"
 #include "storage.h"
+#include "world_runtime.h"
 #include <nlohmann/json.hpp>
 #include <charconv>
 #include <atomic>
@@ -238,6 +239,20 @@ namespace {
     }
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm)
     {
+        vm->RegisterFunction("WorldReset", "NirnCommandNative", nirn::world_runtime::reset);
+        vm->RegisterFunction("WorldRefresh", "NirnCommandNative", nirn::world_runtime::refresh);
+        vm->RegisterFunction("WorldContext", "NirnCommandNative", nirn::world_runtime::context);
+        vm->RegisterFunction("WorldRevision", "NirnCommandNative", nirn::world_runtime::revision);
+        vm->RegisterFunction("WorldCount", "NirnCommandNative", nirn::world_runtime::count);
+        vm->RegisterFunction("WorldEntry", "NirnCommandNative", nirn::world_runtime::entry);
+        vm->RegisterFunction("WorldInspect", "NirnCommandNative", nirn::world_runtime::inspect);
+        vm->RegisterFunction("WorldInspection", "NirnCommandNative", nirn::world_runtime::inspection);
+        vm->RegisterFunction("LocationRevision", "NirnCommandNative", nirn::world_runtime::locationRevision);
+        vm->RegisterFunction("LocationCount", "NirnCommandNative", nirn::world_runtime::locationCount);
+        vm->RegisterFunction("LocationEntry", "NirnCommandNative", nirn::world_runtime::locationEntry);
+        vm->RegisterFunction("LocationInspect", "NirnCommandNative", nirn::world_runtime::inspectLocation);
+        vm->RegisterFunction("LocationInspection", "NirnCommandNative", nirn::world_runtime::locationInspection);
+        vm->RegisterFunction("WorldOpenMap", "NirnCommandNative", nirn::world_runtime::openMap);
         vm->RegisterFunction("CatalogFragments", "NirnCommandNative", CatalogFragments);
         vm->RegisterFunction("CatalogEntry", "NirnCommandNative", CatalogEntry);
         vm->RegisterFunction("InventoryForms", "NirnCommandNative", InventoryForms);
@@ -273,5 +288,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
         spdlog::flush_on(spdlog::level::info);
     }
     SKSE::log::info("Nirn Command native initializing");
+    nirn::world_runtime::initialize();
     return SKSE::GetPapyrusInterface()->Register(RegisterPapyrus);
 }
