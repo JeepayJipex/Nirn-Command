@@ -73,7 +73,7 @@ EndEvent
 
 Function Setup()
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0
-        NirnCommandNative.HotkeyReady(false)
+        NirnCommandNative.HotkeyReady(false, 0)
     endif
     ClosePalette()
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0
@@ -240,8 +240,12 @@ EndEvent
 
 Event OnDomReady(string eventName, string strArg, float numArg, Form sender)
     if strArg == "NirnCommand"
+        if _viewId != 0 && (numArg as int) == _viewId && !_domReady
+            Magelight.Call(_viewId, "ncBridgeReady", "")
+            return
+        endif
         if SKSE.GetPluginVersion("NirnCommandNative") >= 0
-            NirnCommandNative.HotkeyReady(false)
+            NirnCommandNative.HotkeyReady(false, 0)
         endif
         _viewGeneration += 1
         _domReady = false
@@ -1051,7 +1055,7 @@ Event OnCatalog(string eventName, string strArg, float numArg, Form sender)
         endif
         _domReady = true
         if SKSE.GetPluginVersion("NirnCommandNative") >= 0
-            NirnCommandNative.HotkeyReady(true)
+            NirnCommandNative.HotkeyReady(true, _viewId)
         endif
         Debug.Trace("[NirnCommand] Catalog ready session=" + _catalogSession + " epoch=" + _activeEpoch)
         SendCatalog()

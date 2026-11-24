@@ -1,6 +1,6 @@
 Scriptname NirnCommandNative Hidden
 Function ConfigureHotkey(int keyCode, int modifiers) Global Native
-Function HotkeyReady(bool ready) Global Native
+Function HotkeyReady(bool ready, int view) Global Native
 bool Function ConsumeHotkey(int token) Global Native
 Function WorldReset() Global Native
 Function WorldRefresh() Global Native

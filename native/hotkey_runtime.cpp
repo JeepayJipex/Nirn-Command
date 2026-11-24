@@ -9,6 +9,7 @@ hotkey::State state;
 int keyCode = 210;
 int expectedModifiers = 0;
 bool available = false;
+int viewId = 0;
 
 bool pressed(int key)
 {
@@ -43,8 +44,10 @@ public:
             auto ui = RE::UI::GetSingleton();
             const bool menu = !ui || ui->GameIsPaused() || ui->IsItemMenuOpen() || ui->IsModalMenuOpen();
             auto token = state.down(false, observed, expectedModifiers, available && !menu, hotkey::State::Clock::now());
-            SKSE::log::info("Hotkey down key={} held={} armed={} modifiers={}/{} ready={} menu={} token={}",
-                id, state.held(), state.armed(), observed, expectedModifiers, available, menu, token);
+            const char* reason = token ? "accepted" : !state.armed() ? "unarmed" :
+                observed != expectedModifiers ? "modifiers" : !available ? "view-unavailable" : "menu";
+            SKSE::log::info("Hotkey down key={} held={} armed={} modifiers={}/{} view={} ready={} menu={} reason={} token={}",
+                id, state.held(), state.armed(), observed, expectedModifiers, viewId, available, menu, reason, token);
             if (!token) continue;
             auto source = static_cast<RE::BSTEventSource<SKSE::ModCallbackEvent>*>(
                 SKSE::GetMessagingInterface()->GetEventDispatcher(SKSE::MessagingInterface::Dispatcher::kModEvent));
@@ -79,10 +82,11 @@ void configure(RE::StaticFunctionTag*, std::int32_t key, std::int32_t modifiers)
     expectedModifiers = modifiers;
     state.reset(pressed(keyCode));
 }
-void ready(RE::StaticFunctionTag*, bool value)
+void ready(RE::StaticFunctionTag*, bool value, std::int32_t view)
 {
     std::scoped_lock lock(mutex);
     available = value;
+    viewId = value ? view : 0;
     if (!value) state.reset(pressed(keyCode));
 }
 bool consume(RE::StaticFunctionTag*, std::int32_t token)
