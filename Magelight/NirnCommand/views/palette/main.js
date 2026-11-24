@@ -211,6 +211,7 @@
       const ordered=[...favorites.slice(0,8),...Object.keys(usage).sort((a,b)=>(usage[b].lastUsedAt||0)-(usage[a].lastUsedAt||0)).slice(0,8),...statics.map(e=>e.id),...commands.map(e=>e.id)];
       if(category==='Items'||category==='Spells') ordered.push(...entries.slice().sort((a,b)=>normalize(a.label).localeCompare(normalize(b.label))||a.id.localeCompare(b.id)).map(e=>e.id));
       if(category==='NPCs') ordered.push(...entries.filter(e=>e.kind==='NPC').sort((a,b)=>a.distance-b.distance).slice(0,8).map(e=>e.id));
+      if(category==='Locations') ordered.push(...entries.filter(e=>e.kind==='Location').sort((a,b)=>normalize(a.label).localeCompare(normalize(b.label))||a.id.localeCompare(b.id)).slice(0,8).map(e=>e.id));
       return [...new Set(ordered)].map(id=>byId.get(id)).filter(Boolean).slice(0,20);
     }
     const parts=({Actions:['static','commands','providers'],Items:['catalog'],Spells:['catalog'],NPCs:['npcs'],Locations:['locations']})[category];

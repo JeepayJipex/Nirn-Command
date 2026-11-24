@@ -57,11 +57,20 @@ window.ncWorldContext('save-two|1');
 window.ncWorldBegin('save-two|2|location|1|1|1');
 window.ncWorldEntry('save-two|2|location|1|1|0|'+JSON.stringify({id:'location:9',token:'9',label:'Whiterun',detail:'Skyrim'}));
 window.ncWorldComplete('save-two|2|location|1|1');
-categories.children[5].listeners.click(); input.value='white'; input.listeners.input();
+categories.children[5].listeners.click(); input.value=''; input.listeners.input();
+assert.equal(results.children.length,1); assert.equal(results.children[0].children[1].children[0].textContent,'Whiterun');
+input.value='white'; input.listeners.input();
 assert.equal(results.children.length,1); key('Enter'); assert.equal(results.children.length,3);
 window.ncWorldInspect('save-one|2|location|9|'+JSON.stringify({available:true})); assert.equal(results.children.length,3);
 window.ncWorldInspect('save-two|2|location|9|'+JSON.stringify({available:true,detail:'Skyrim'})); assert.equal(results.children.length,4);
 key('Escape'); assert.equal(categories.children[5].attrs['aria-pressed'],'true');
+window.ncWorldBegin('save-two|2|location|2|2|10');
+for(let i=0;i<10;i++) window.ncWorldEntry('save-two|2|location|2|2|'+i+'|'+JSON.stringify({id:'location:'+i,token:String(i+1),label:'Site '+i,detail:'Skyrim'}));
+window.ncWorldComplete('save-two|2|location|2|2');
+input.value=''; input.listeners.input(); assert.equal(results.children.length,8);
+input.value='site 9'; input.listeners.input(); assert.equal(results.children.length,1);
+input.value=''; input.listeners.input(); categories.children[0].listeners.click();
+assert.ok(!results.children.some(row=>row.children[1]?.children[0]?.textContent?.startsWith('Site ')));
 console.log('World categories, details, unavailable references and save isolation passed.');
 
 

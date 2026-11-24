@@ -13,6 +13,11 @@ assert.equal(catalog.append('save-a','world-a','location',1,1,row('3','Whiterun'
 assert.equal(catalog.entries('npc').length,2);
 assert.ok(catalog.append('save-a','world-a','location',1,0,row('3','Whiterun')));
 assert.ok(catalog.complete('save-a','world-a','location',1));
+assert.ok(catalog.begin('save-a','world-a','location',2,2));
+assert.ok(catalog.append('save-a','world-a','location',2,0,row('4','Twin Site')));
+assert.ok(catalog.append('save-a','world-a','location',2,1,row('5','Twin Site')));
+assert.ok(catalog.complete('save-a','world-a','location',2));
+assert.equal(catalog.entries('location').length,2);
 assert.ok(catalog.begin('save-a','world-a','npc',2,1));
 assert.equal(catalog.entries('npc').length,2);
 assert.ok(catalog.begin('save-a','world-a','npc',2,1,1));
