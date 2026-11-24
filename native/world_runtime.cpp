@@ -34,6 +34,7 @@ struct MapRequest {
     std::uint32_t handle{};
     std::chrono::steady_clock::time_point deadline;
     bool opened{}, checkPending{};
+    const char* waiting="map opening";
 };
 std::optional<MapRequest> mapRequest;
 std::uint32_t mapSerial=0;
@@ -548,7 +549,10 @@ std::int32_t stepMap(RE::StaticFunctionTag*, std::int32_t requestId)
         std::scoped_lock lock(mutex);
         if (!mapRequest || mapRequest->serial!=serial) return 0;
         if (mapRequest->saveSession!=session.load()) { cancelMap("save boundary"); return 0; }
-        if (std::chrono::steady_clock::now()>=mapRequest->deadline) { cancelMap("readiness timeout; general map"); return 0; }
+        if (std::chrono::steady_clock::now()>=mapRequest->deadline) {
+            SKSE::log::info("Map request={} timeout waiting for {}",serial,mapRequest->waiting);
+            cancelMap("readiness timeout; general map"); return 0;
+        }
         if (mapRequest->checkPending) return 1;
         mapRequest->checkPending=true;
     }
@@ -573,13 +577,16 @@ std::int32_t stepMap(RE::StaticFunctionTag*, std::int32_t requestId)
             const bool sameWorld=ready && mapRequest->world && data->worldSpace->GetFormID()==mapRequest->world;
             const auto readiness=nirn::world::mapReadiness(true,true,std::chrono::steady_clock::now()>=mapRequest->deadline,
                 mapRequest->opened,menuOpen,ready,sameWorld);
-            if (readiness==nirn::world::MapReadiness::wait) return;
+            if (readiness==nirn::world::MapReadiness::wait) {
+                mapRequest->waiting=mapRequest->opened ? "menu controls or Scaleform handler" : "map opening";
+                return;
+            }
             if (readiness==nirn::world::MapReadiness::cancel) { cancelMap("map closed"); return; }
             if (readiness==nirn::world::MapReadiness::fallback) { cancelMap("timeout or unsupported worldspace; general map"); return; }
             const auto& markers=data->mapMarkers;
             if (markers.size()>8192) { cancelMap("marker limit; general map"); return; }
             auto match=nirn::world::matchMapMarker(markers,mapRequest->handle);
-            if (!match.count) return;
+            if (!match.count) { mapRequest->waiting="matching marker"; return; }
             SKSE::log::info("Map request={} menu ready matches={} index={}",serial,match.count,match.index);
             if (match.count!=1) { cancelMap("ambiguous marker; general map"); return; }
             RE::GFxValue argument(static_cast<double>(match.index));
