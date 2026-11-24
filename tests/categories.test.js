@@ -38,11 +38,8 @@ assert.equal(results.children.length,2); assert.equal(results.children[0].childr
 key('Enter'); bridgeEvents.__uimode('0'); categories.children[4].listeners.click();
 assert.equal(results.children[0].children[1].children[1].textContent,'25 units · left');
 key('Enter');
-let msg=sent.at(-1)[1].split('|'); assert.equal(msg[0],'inspect');
-window.ncWorldInspect('save-one|1|npc|2|'+msg[5]+'|'+JSON.stringify({available:false}));
-assert.equal(results.children[0].children[1].children[1].textContent,'Temporarily unavailable');
-key('Enter'); msg=sent.at(-1)[1].split('|'); categories.children[2].listeners.click();
-window.ncWorldInspect('save-one|1|npc|2|'+msg[5]+'|'+JSON.stringify({available:true}));
+let msg=sent.at(-1)[1].split('|'); assert.equal(msg[0],'track');
+assert.equal(msg[3],'2'); categories.children[2].listeners.click();
 assert.equal(categories.children[2].attrs['aria-pressed'],'true');
 window.ncGameLoaded('save-two'); window.ncWorldComplete('save-one|1|npc|1|1');
 categories.children[4].listeners.click(); input.value=''; input.listeners.input(); assert.match(results.children[0].textContent,/No npcs/);

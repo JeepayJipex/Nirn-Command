@@ -178,7 +178,7 @@ void resolveTrackingActor(RE::StaticFunctionTag*, std::int32_t id, std::int32_t 
             SKSE::log::info("Tracking rejected stale request={} context={} token={:08X}",requestId,expectedContext,token);
             return;
         }
-        trackingActor=accepted ? actor : nullptr;
+        trackingActor.reset(accepted ? actor : nullptr);
         trackingStatus=accepted ? 1 : -1;
         SKSE::log::info("Tracking validation request={} context={} token={:08X} form={:08X} valid={}",requestId,expectedContext,token,actor ? actor->GetFormID() : 0,accepted);
     });
@@ -193,9 +193,10 @@ RE::Actor* trackingResolvedActor(RE::StaticFunctionTag*, std::int32_t requestId)
     std::scoped_lock lock(mutex);
     return trackingRequest==requestId && trackingStatus==1 ? trackingActor.get() : nullptr;
 }
-void clearTrackingResolution(RE::StaticFunctionTag*)
+void clearTrackingResolution(RE::StaticFunctionTag*, std::int32_t requestId)
 {
     std::scoped_lock lock(mutex);
+    if (requestId && trackingRequest!=requestId) return;
     trackingRequest=trackingStatus=0;
     trackingActor.reset();
 }

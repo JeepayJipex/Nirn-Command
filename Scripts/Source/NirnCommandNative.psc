@@ -16,7 +16,7 @@ Function WorldOpenMap(int token) Global Native
 Function ResolveTrackingActor(int token, int context, int request) Global Native
 int Function TrackingResolutionStatus(int request) Global Native
 Actor Function TrackingResolvedActor(int request) Global Native
-Function ClearTrackingResolution() Global Native
+Function ClearTrackingResolution(int request) Global Native
 Function RefreshDiscovery() Global Native
 int Function DiscoveryRevision() Global Native
 int Function DiscoveryCount() Global Native

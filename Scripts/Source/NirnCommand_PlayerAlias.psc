@@ -46,6 +46,8 @@ float _npcSentAt
 float _locationSentAt
 int _trackingEpoch
 int _trackingRequest
+int _trackingOwner
+bool _trackingBusy
 Actor _trackedActor
 float _lastTrackingCheck
 
@@ -55,6 +57,8 @@ EndEvent
 
 Event OnPlayerLoadGame()
     _trackingEpoch += 1
+    _trackingBusy = false
+    _trackingOwner = 0
     Debug.Trace("[NirnCommand] Tracking save/load cleanup epoch=" + _trackingEpoch)
     CleanupTracking()
     _epoch += 1
@@ -719,7 +723,7 @@ Function CleanupTracking()
     endif
     _trackedActor = None
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0
-        NirnCommandNative.ClearTrackingResolution()
+        NirnCommandNative.ClearTrackingResolution(0)
     endif
 EndFunction
 
@@ -734,9 +738,7 @@ Function PublishTracking()
     Magelight.Call(_viewId, "ncTrackingState", _catalogSession + "|" + formId)
 EndFunction
 
-Function TrackNPC(int token, int context, string request, string session, int viewGeneration)
-    _trackingEpoch += 1
-    int operation = _trackingEpoch
+Function TrackNPC(int token, int context, string request, string session, int viewGeneration, int operation)
     _trackingRequest += 1
     int nativeRequest = _trackingRequest
     Debug.Trace("[NirnCommand] Tracking request=" + request + " session=" + session + " context=" + context + " token=" + token)
@@ -764,10 +766,11 @@ Function TrackNPC(int token, int context, string request, string session, int vi
     endwhile
     if status != 1 || operation != _trackingEpoch || session != _catalogSession || viewGeneration != _viewGeneration || context != NirnCommandNative.WorldContext()
         Debug.Trace("[NirnCommand] Tracking invalid or stale request=" + request + " status=" + status)
+        NirnCommandNative.ClearTrackingResolution(nativeRequest)
         return
     endif
     Actor candidate = NirnCommandNative.TrackingResolvedActor(nativeRequest)
-    NirnCommandNative.ClearTrackingResolution()
+    NirnCommandNative.ClearTrackingResolution(nativeRequest)
     if !candidate || candidate.IsDead() || candidate.IsDisabled() || candidate.IsDeleted()
         Debug.Trace("[NirnCommand] Tracking invalid actor request=" + request)
         return
@@ -807,7 +810,7 @@ Function TrackNPC(int token, int context, string request, string session, int vi
     endif
     if operation != _trackingEpoch || session != _catalogSession || viewGeneration != _viewGeneration || context != NirnCommandNative.WorldContext()
         Debug.Trace("[NirnCommand] Tracking rejected stale startup request=" + request)
-        if operation == _trackingEpoch
+        if operation == _trackingEpoch || !_trackingBusy || _trackingOwner == operation
             CleanupTracking()
         endif
         return
@@ -847,8 +850,18 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
         if separator > 0
             int token = StringUtil.Substring(arguments, 0, separator) as int
             string request = StringUtil.Substring(arguments, separator + 1)
-            if token != 0 && request != ""
-                TrackNPC(token, _worldContext, request, _catalogSession, _viewGeneration)
+            if token != 0 && request != "" && !_trackingBusy && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
+                _trackingEpoch += 1
+                int operation = _trackingEpoch
+                _trackingOwner = operation
+                _trackingBusy = true
+                TrackNPC(token, _worldContext, request, _catalogSession, _viewGeneration, operation)
+                if _trackingOwner == operation
+                    _trackingBusy = false
+                    _trackingOwner = 0
+                endif
+            else
+                Debug.Trace("[NirnCommand] Tracking rejected busy or inactive request=" + request)
             endif
         endif
         return
