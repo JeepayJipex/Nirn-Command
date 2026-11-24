@@ -4,6 +4,7 @@
 #include "providers.h"
 #include "storage.h"
 #include "world_runtime.h"
+#include "hotkey_runtime.h"
 #include <nlohmann/json.hpp>
 #include <charconv>
 #include <atomic>
@@ -239,6 +240,9 @@ namespace {
     }
     bool RegisterPapyrus(RE::BSScript::IVirtualMachine* vm)
     {
+        vm->RegisterFunction("ConfigureHotkey", "NirnCommandNative", nirn::hotkey_runtime::configure);
+        vm->RegisterFunction("HotkeyReady", "NirnCommandNative", nirn::hotkey_runtime::ready);
+        vm->RegisterFunction("ConsumeHotkey", "NirnCommandNative", nirn::hotkey_runtime::consume);
         vm->RegisterFunction("WorldReset", "NirnCommandNative", nirn::world_runtime::reset);
         vm->RegisterFunction("WorldRefresh", "NirnCommandNative", nirn::world_runtime::refresh);
         vm->RegisterFunction("DiagnoseLocations", "NirnCommandNative", nirn::world_runtime::diagnoseLocations);
@@ -298,5 +302,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
     }
     SKSE::log::info("Nirn Command native initializing");
     nirn::world_runtime::initialize();
+    nirn::hotkey_runtime::initialize();
     return SKSE::GetPapyrusInterface()->Register(RegisterPapyrus);
 }
