@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 
 namespace nirn::hotkey {
 class State {
@@ -13,7 +14,7 @@ public:
         armed_ = !physicallyHeld;
         held_ = physicallyHeld;
         ++generation_;
-        pending_ = 0;
+        pending_.clear();
     }
 
     std::uint64_t down(bool repeat, int observedModifiers, int expectedModifiers, bool available,
@@ -22,10 +23,10 @@ public:
         if (repeat || !armed_) return 0;
         held_ = true;
         if (observedModifiers != expectedModifiers || !available) return 0;
-        pending_ = ++sequence_;
-        pendingGeneration_ = generation_;
-        captured_ = now;
-        return pending_;
+        if (++sequence_ > 0x7fffffff) sequence_ = 1;
+        if (pending_.size() == 16) pending_.pop_front();
+        pending_.push_back({sequence_, generation_, now});
+        return sequence_;
     }
 
     void up()
@@ -36,10 +37,14 @@ public:
 
     bool consume(std::uint64_t token, Clock::time_point now)
     {
-        const bool valid = token && token == pending_ && pendingGeneration_ == generation_ &&
-            now >= captured_ && now - captured_ <= std::chrono::milliseconds(250);
-        if (token == pending_) pending_ = 0;
-        return valid;
+        for (auto it = pending_.begin(); it != pending_.end(); ++it) {
+            if (it->token != token) continue;
+            const bool valid = it->generation == generation_ && now >= it->captured &&
+                now - it->captured <= std::chrono::milliseconds(250);
+            pending_.erase(it);
+            return valid;
+        }
+        return false;
     }
 
     bool held() const { return held_; }
@@ -49,9 +54,8 @@ private:
     bool held_ = false;
     bool armed_ = false;
     std::uint64_t generation_ = 0;
-    std::uint64_t pendingGeneration_ = 0;
     std::uint64_t sequence_ = 0;
-    std::uint64_t pending_ = 0;
-    Clock::time_point captured_{};
+    struct Pending { std::uint64_t token; std::uint64_t generation; Clock::time_point captured; };
+    std::deque<Pending> pending_;
 };
 }

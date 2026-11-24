@@ -18,6 +18,8 @@ int main()
     assert(state.consume(first, now + 100ms));
     assert(!state.consume(first, now + 100ms));
     auto second = state.down(false, 1, 1, true, now + 110ms);
+    auto third = state.down(false, 1, 1, true, now + 120ms);
+    assert(state.consume(third, now + 130ms));
     assert(second && !state.consume(second, now + 361ms));
     assert(!state.down(false, 0, 1, true, now));
     assert(!state.down(false, 1, 1, false, now));
