@@ -1,5 +1,12 @@
 # Known issues and verification limits
 
+## Hotkey reliability review
+
+- Native input capture and the save-load guard need gameplay validation. After loading a save, check that the palette stays closed until the configured shortcut is pressed and opens on a normal tap. Verify the configured modifier chord during ordinary play.
+- If a press fails, collect `NirnCommandNative.log`, Papyrus and Magelight logs. Native `Hotkey down` entries record the key, held and armed state, observed and expected modifier masks, view readiness, menu state, decision and token. Papyrus records token rejection and UI mode results.
+- The previous Papyrus handler checked physical key and modifier state when the queued event ran. A release before that check could reject a real press. A missed key-up could also leave its held flag set, and reconfiguration did not reset its armed flag. These code paths are confirmed, while their contribution to the reported misses remains unmeasured.
+- A prior gameplay log showed an unsolicited open during VM thaw before setup closed the palette. Its event source was not confirmed. A later log recorded two bridge setups around startup, without enough detail to associate a failed press with either setup.
+
 ## v0.5C.3 map actions
 
 - The project owner confirmed precise map positioning in game with the camera-fix build. Fallback behavior and compatibility across other map replacements and worldspaces remain to be observed. See `docs/map-actions-test.md` for diagnostics.
@@ -16,4 +23,4 @@
 
 ## v0.5A review build
 
-Search includes bounded typo-tolerant word-prefix matching. Nirn Command requests a paused Magelight UI mode; while open, a session-scoped heartbeat services pending catalog work. On game load, Nirn Command closes its own UI mode and ignores hotkey events when the physical key is not pressed. Opening or closing the palette, pause recovery, and catalog progress while paused require in-game verification; synthetic tests do not reproduce Skyrim's Papyrus scheduler or saved event stacks.
+Search includes bounded typo-tolerant word-prefix matching. Nirn Command requests a paused Magelight UI mode; while open, a session-scoped heartbeat services pending catalog work. Opening or closing the palette, pause recovery, and catalog progress while paused require in-game verification; synthetic tests do not reproduce Skyrim's Papyrus scheduler or saved event stacks.
