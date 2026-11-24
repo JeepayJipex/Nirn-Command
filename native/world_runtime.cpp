@@ -119,6 +119,7 @@ std::optional<LocationImport> locationImport;
 std::chrono::steady_clock::time_point lastLocationImport{};
 RE::FormID lastImportCell=0, lastImportWorld=0;
 std::uint64_t lastImportSession=0, lastImportChange=0;
+std::size_t lastImportMarkerCount=0;
 
 void importLocations(RE::PlayerCharacter* player, std::uint64_t request)
 {
@@ -134,7 +135,8 @@ void importLocations(RE::PlayerCharacter* player, std::uint64_t request)
     }
     if (!locationImport) {
         if (lastImportSession==request && lastImportCell==cell && lastImportWorld==world &&
-            lastImportChange==changes && now-lastLocationImport<std::chrono::seconds(30)) return;
+            lastImportChange==changes && lastImportMarkerCount==markers.size() &&
+            now-lastLocationImport<std::chrono::seconds(30)) return;
         locationImport.emplace();
         auto& scan=*locationImport;
         scan.sessionId=request; scan.changeId=changes; scan.cell=cell; scan.world=world;
@@ -192,6 +194,7 @@ void importLocations(RE::PlayerCharacter* player, std::uint64_t request)
     }
     const auto publication=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-publishStart);
     lastImportSession=request; lastImportCell=cell; lastImportWorld=world; lastImportChange=changes;
+    lastImportMarkerCount=markers.size();
     lastLocationImport=std::chrono::steady_clock::now();
     SKSE::log::info("Known locations import complete world={:08X} candidates={} checked={} visible={} excluded={} duplicates={} enumeration_us={} max_batch_us={} publication_us={} wall_ms={} coverage=progressive",world,scan.markerCount,scan.checked,visible,scan.excluded,scan.duplicates,scan.elapsed.count(),scan.maximumBatch.count(),publication.count(),std::chrono::duration_cast<std::chrono::milliseconds>(lastLocationImport-scan.started).count());
     locationImport.reset();
