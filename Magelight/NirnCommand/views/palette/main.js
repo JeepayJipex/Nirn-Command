@@ -177,7 +177,17 @@
   const worldCatalog=window.NirnWorldCatalog?.create();
   let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldRequest=null;
   let trackedForm='', trackingRevision=0;
+  let trackingMatchLog='';
   const stopTracking={id:'tracking:stop',label:'Stop tracking NPC',kind:'Action',action:'local:stop-tracking',transient:true};
+  function reportTrackingMatch() {
+    if(!trackedForm) { trackingMatchLog=''; return; }
+    const matches=worldNpcs.filter(entry=>entry.form===trackedForm).length;
+    const summary=`${trackedForm}|${matches}`;
+    if(summary!==trackingMatchLog && bridge && catalogSession && worldContext) {
+      bridge.send('world',`tracking-ui|${catalogSession}|${worldContext}|${summary}|${worldNpcs.length}`);
+      trackingMatchLog=summary;
+    }
+  }
   function cancelWorldRequest() {
     if (!worldRequest) return;
     const item=[...worldNpcs,...worldLocations].find(entry=>entry.id===worldRequest.id);
@@ -247,9 +257,10 @@
       const row = document.createElement('div'); row.className='entry' + (i === selected ? ' selected' : ''); row.setAttribute('role','option'); if(entry.source) row.title=`${entry.source} · ${entry.confidence || ''}`; row.setAttribute('aria-selected',String(i === selected));
       const icon=document.createElement('span'); icon.className='symbol'; icon.textContent=({Mod:'⚙',Travel:'⌖',Console:'⌘',Item:'◇',Spell:'✧',NPC:'♙',Location:'⌖'})[entry.kind] || '✦';
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; highlight(label,entry.label,input.value);
-      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=entry.worldStatus || (available(entry) ? ((entry.kind==='NPC' && entry.form===trackedForm ? 'Tracked · ' : '') + (entry.detail || '')) : unavailableReason(entry)); info.append(label,detail);
+      const detail=document.createElement('span'); detail.className='detail'; detail.textContent=entry.worldStatus || (available(entry) ? (entry.detail || '') : unavailableReason(entry)); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
-      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind==='Location'?'Open general map':entry.kind || '';
+      const isTracked=entry.kind==='NPC' && entry.form===trackedForm;
+      const kind=document.createElement('span'); kind.className='kind' + (isTracked?' tracked':''); kind.textContent=isTracked?'Tracked':entry.kind==='Location'?'Open general map':entry.kind || '';
       if(entry.transient) star.disabled=true;
       row.append(icon,info,star,kind);
       row.addEventListener('mouseenter',() => {
@@ -331,7 +342,7 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackedForm=''; trackingRevision=0; indexedStatics=false; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackedForm=''; trackingRevision=0; trackingMatchLog=''; indexedStatics=false; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncTrackingState = function(payload) {
     const [session,revision,form]=String(payload).split('|');
     const version=Number(revision);
@@ -339,6 +350,7 @@
     trackingRevision=version;
     const id=Number(form) >>> 0;
     trackedForm=id ? String(id) : '';
+    reportTrackingMatch();
     indexedStatics=false;
     render();
   };
@@ -346,7 +358,7 @@
     const [session,context]=String(payload).split('|');
     const revision=Number(context);
     if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
-    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog.reset(session,context); render();
+    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackingMatchLog=''; worldCatalog.reset(session,context); reportTrackingMatch(); render();
   };
   window.ncWorldBegin = function(payload) {
     const [session,context,kind,generation,attempt,count]=String(payload).split('|');
@@ -365,7 +377,7 @@
     const [session,context,kind,generation,attempt]=String(payload).split('|');
     if(!worldCatalog?.complete(session,context,kind,Number(generation),Number(attempt))) return;
     const entries=worldCatalog.entries(kind).map(row=>({...row,kind:kind==='npc'?'NPC':'Location',action:`world:${row.token}`,transient:true}));
-    if(kind==='npc') worldNpcs=entries; else worldLocations=entries;
+    if(kind==='npc') { worldNpcs=entries; reportTrackingMatch(); } else worldLocations=entries;
     render();
     if(bridge) bridge.send('world',`applied|${session}|${context}|${kind}|${generation}|${attempt}`);
   };

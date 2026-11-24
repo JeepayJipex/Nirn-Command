@@ -854,6 +854,11 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
         return
     endif
+    string uiPrefix = "tracking-ui|" + _catalogSession + "|" + _worldContext + "|"
+    if _worldContext > 0 && StringUtil.Find(payload, uiPrefix) == 0
+        Debug.Trace("[NirnCommand] Tracking UI match context=" + _worldContext + " form|matches|entries=" + StringUtil.Substring(payload, StringUtil.GetLength(uiPrefix)))
+        return
+    endif
     string trackingPrefix = "track|" + _catalogSession + "|" + _worldContext + "|"
     if _worldContext > 0 && StringUtil.Find(payload, trackingPrefix) == 0
         string arguments = StringUtil.Substring(payload, StringUtil.GetLength(trackingPrefix))
