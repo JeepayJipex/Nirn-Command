@@ -2,9 +2,9 @@
 
 ## v0.5C.3 map actions
 
-- Precise positioning and fallback behavior have not yet been verified in Skyrim. The active map replacement and worldspace can affect support. See `docs/map-actions-test.md` for the primary gameplay test and diagnostics.
+- The project owner confirmed precise map positioning in game with the camera-fix build. Fallback behavior and compatibility across other map replacements and worldspaces remain to be observed. See `docs/map-actions-test.md` for diagnostics.
 
-- This version has not been run in Skyrim. Startup, input focus, simulated shortcuts, native API calls, persistence and save transitions remain unverified in game.
+- The full range of startup, input focus, simulated shortcuts, native API calls, persistence and save transitions remains unverified in game.
 - The native DLL is intended for SE 1.5.97 and AE 1.6.1170. Automated compilation cannot establish runtime compatibility with either executable or a particular mod list.
 - Discovery covers known native integrations and declared MCM Helper bindings. It cannot enumerate every Papyrus or SKSE shortcut, prove that a configuration was loaded, or guarantee simulated keys are received.
 - Background catalog scans use base forms and do not distinguish individual enchanted instances. Spell filtering does not fully classify modded powers or passive effects. Timings and gameplay impact have not been measured in game.
