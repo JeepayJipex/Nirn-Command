@@ -8,6 +8,10 @@
 #include <vector>
 
 namespace nirn::world {
+inline bool eligibleLocation(std::uint32_t id, bool enabled, bool visible, bool named)
+{
+    return id && enabled && visible && named;
+}
 inline bool appendLocationCandidate(std::uint32_t id, std::unordered_set<std::uint32_t>& seen,
     std::vector<std::uint32_t>& ids)
 {

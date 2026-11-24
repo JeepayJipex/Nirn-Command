@@ -4,6 +4,9 @@
 int main()
 {
     using namespace nirn::world;
+    if (!eligibleLocation(42,true,true,true) || eligibleLocation(0,true,true,true) ||
+        eligibleLocation(42,false,true,true) || eligibleLocation(42,true,false,true) ||
+        eligibleLocation(42,true,true,false)) throw std::runtime_error("location eligibility failed");
     std::unordered_set<std::uint32_t> markerIds;
     std::vector<std::uint32_t> candidates;
     if (!appendLocationCandidate(42,markerIds,candidates) || appendLocationCandidate(42,markerIds,candidates) ||

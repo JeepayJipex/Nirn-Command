@@ -89,11 +89,12 @@ void probeLocations(RE::PlayerCharacter* player, std::uint64_t request)
 
 std::string locationRow(RE::TESObjectREFR* ref)
 {
-    if (!ref || ref->IsDeleted() || ref->IsDisabled()) return {};
+    if (!ref) return {};
     auto extra=ref->extraList.GetByType<RE::ExtraMapMarker>();
-    if (!extra || !extra->mapData || !extra->mapData->flags.any(RE::MapMarkerData::Flag::kVisible)) return {};
-    const char* name=extra->mapData->locationName.GetFullName();
-    if (!ref->GetFormID() || !name || !*name) return {};
+    auto marker=extra ? extra->mapData : nullptr;
+    const char* name=marker ? marker->locationName.GetFullName() : nullptr;
+    if (!nirn::world::eligibleLocation(ref->GetFormID(),!ref->IsDeleted() && !ref->IsDisabled(),
+        marker && marker->flags.any(RE::MapMarkerData::Flag::kVisible),name && *name)) return {};
     auto world=ref->GetWorldspace();
     const char* worldName=world ? world->GetName() : nullptr;
     std::string place=worldName && *worldName ? worldName : "Worldspace unavailable";
