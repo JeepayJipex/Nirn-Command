@@ -12,6 +12,8 @@ namespace {
 std::mutex mutex;
 std::atomic_uint64_t session{1};
 std::atomic_bool pending{false};
+std::int32_t trackingRequest=0, trackingStatus=0;
+RE::NiPointer<RE::Actor> trackingActor;
 std::int32_t contextId=0, generation=0;
 RE::FormID currentCell=0, currentWorld=0;
 std::vector<std::string> rows, transfer;
@@ -88,6 +90,7 @@ void revert(SKSE::SerializationInterface*)
 {
     ++session;
     std::scoped_lock lock(mutex);
+    trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
     discoveredLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
 }
@@ -148,7 +151,53 @@ void reset(RE::StaticFunctionTag*)
 {
     ++session;
     std::scoped_lock lock(mutex);
+    trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+}
+void resolveTrackingActor(RE::StaticFunctionTag*, std::int32_t id, std::int32_t expectedContext, std::int32_t requestId)
+{
+    const auto requestSession=session.load();
+    const auto token=static_cast<std::uint32_t>(id);
+    {
+        std::scoped_lock lock(mutex);
+        trackingRequest=requestId; trackingStatus=0; trackingActor.reset();
+    }
+    SKSE::GetTaskInterface()->AddTask([requestSession, token, expectedContext, requestId] {
+        RE::ObjectRefHandle handle;
+        {
+            std::scoped_lock lock(mutex);
+            auto found=handles.find(token);
+            if (requestSession==session.load() && expectedContext==contextId && trackingRequest==requestId && found!=handles.end()) handle=found->second;
+        }
+        auto ref=handle.get();
+        auto actor=ref ? ref->As<RE::Actor>() : nullptr;
+        auto player=RE::PlayerCharacter::GetSingleton();
+        const bool accepted=valid(actor,player) && actor->GetDistance(player)<=radius();
+        std::scoped_lock lock(mutex);
+        if (requestSession!=session.load() || expectedContext!=contextId || trackingRequest!=requestId) {
+            SKSE::log::info("Tracking rejected stale request={} context={} token={:08X}",requestId,expectedContext,token);
+            return;
+        }
+        trackingActor=accepted ? actor : nullptr;
+        trackingStatus=accepted ? 1 : -1;
+        SKSE::log::info("Tracking validation request={} context={} token={:08X} form={:08X} valid={}",requestId,expectedContext,token,actor ? actor->GetFormID() : 0,accepted);
+    });
+}
+std::int32_t trackingResolutionStatus(RE::StaticFunctionTag*, std::int32_t requestId)
+{
+    std::scoped_lock lock(mutex);
+    return trackingRequest==requestId ? trackingStatus : -1;
+}
+RE::Actor* trackingResolvedActor(RE::StaticFunctionTag*, std::int32_t requestId)
+{
+    std::scoped_lock lock(mutex);
+    return trackingRequest==requestId && trackingStatus==1 ? trackingActor.get() : nullptr;
+}
+void clearTrackingResolution(RE::StaticFunctionTag*)
+{
+    std::scoped_lock lock(mutex);
+    trackingRequest=trackingStatus=0;
+    trackingActor.reset();
 }
 void refresh(RE::StaticFunctionTag*)
 {
@@ -173,7 +222,7 @@ void refresh(RE::StaticFunctionTag*)
             nirn::world::ActorCandidate candidate{token,name ? name : "",distance,true,true,true,true,false,true};
             if (!nirn::world::eligible(candidate,radius())) return RE::BSContainer::ForEachResult::kContinue;
             const auto signedToken=static_cast<std::int32_t>(token);
-            nlohmann::json row={{"id","npc:"+std::to_string(signedToken)},{"token",std::to_string(signedToken)},
+            nlohmann::json row={{"id","npc:"+std::to_string(signedToken)},{"token",std::to_string(signedToken)},{"form",std::to_string(actor->GetFormID())},
                 {"label",name},{"distance",distance},{"detail",detail(actor,player,distance)}};
             auto serialized=row.dump(-1,' ',false,nlohmann::json::error_handler_t::replace);
             if (serialized.size()>800) {SKSE::log::warn("World NPC omitted: encoded row too long form={:08X}",actor->GetFormID()); return RE::BSContainer::ForEachResult::kContinue;}
