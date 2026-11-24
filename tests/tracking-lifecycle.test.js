@@ -20,6 +20,8 @@ function compile(name, args) {
 }
 const make=compile('TrackNPC','token, context, request, session, viewGeneration, operation');
 const makeCleanup=compile('CleanupTracking','');
+const makeValidity=compile('TrackingStillValid','');
+const makeCancellationMatch=compile('TrackingCancellationMatches','targetForm');
 function fixture() {
   const actor=id=>({id, dead:false, disabled:false, deleted:false,GetFormID(){return this.id;},IsDead(){return this.dead;},IsDisabled(){return this.disabled;},IsDeleted(){return this.deleted;}});
   const a=actor(100),b=actor(200);
@@ -66,5 +68,11 @@ for (const invalid of ['disabled','deleted']) {
 }
 {
  const f=fixture();f.track();f.ctx.candidate=f.b;f.b.disabled=true;f.track();assert.equal(f.ctx._trackedActor,f.a);assert.equal(f.alias.actor,f.a);
+}
+{
+ const f=fixture();f.track();const valid=makeValidity(f.ctx);f.a.dead=true;assert.equal(valid(),true);f.a.disabled=true;assert.equal(valid(),false);f.a.disabled=false;f.a.deleted=true;assert.equal(valid(),false);
+}
+{
+ const f=fixture();f.track();const matches=makeCancellationMatch(f.ctx);assert.equal(matches(100),true);f.ctx.candidate=f.b;f.track();assert.equal(matches(100),false);assert.equal(matches(200),true);f.ctx.CleanupTracking();assert.equal(matches(200),false);
 }
 console.log('Papyrus tracking control flow passed with mocked engine APIs.');

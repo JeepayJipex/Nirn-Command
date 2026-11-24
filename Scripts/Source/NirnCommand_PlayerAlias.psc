@@ -149,12 +149,7 @@ Function ServiceCatalog()
     float now = Utility.GetCurrentRealTime()
     if _trackingConfirmed && now - _lastTrackingCheck >= 5.0
         _lastTrackingCheck = now
-        Quest tracking = TrackingQuest()
-        ReferenceAlias targetAlias
-        if tracking
-            targetAlias = tracking.GetAlias(0) as ReferenceAlias
-        endif
-        if !_trackedActor || _trackedActor.IsDead() || _trackedActor.IsDisabled() || _trackedActor.IsDeleted() || !tracking || !targetAlias || targetAlias.GetActorRef() != _trackedActor || !tracking.IsRunning() || !tracking.IsActive() || !tracking.IsObjectiveDisplayed(10)
+        if !TrackingStillValid()
             Debug.Trace("[NirnCommand] Tracking target or quest is no longer valid")
             _trackingEpoch += 1
             CleanupTracking()
@@ -714,6 +709,19 @@ Function PublishWorldLocations()
     _worldSending = false
 EndFunction
 
+bool Function TrackingStillValid()
+    Quest tracking = TrackingQuest()
+    if !_trackedActor || _trackedActor.IsDisabled() || _trackedActor.IsDeleted() || !tracking
+        return false
+    endif
+    ReferenceAlias targetAlias = tracking.GetAlias(0) as ReferenceAlias
+    return targetAlias && targetAlias.GetActorRef() == _trackedActor && tracking.IsRunning() && tracking.IsActive() && tracking.IsObjectiveDisplayed(10)
+EndFunction
+
+bool Function TrackingCancellationMatches(int targetForm)
+    return _trackingConfirmed && _trackedActor && targetForm == _trackedActor.GetFormID()
+EndFunction
+
 Quest Function TrackingQuest()
     return Game.GetFormFromFile(0xD63, "NirnCommand.esp") as Quest
 EndFunction
@@ -887,6 +895,15 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     string stopPrefix = "stop-tracking|" + _catalogSession + "|" + _worldContext + "|"
     if _worldContext > 0 && StringUtil.Find(payload, stopPrefix) == 0
         string request = StringUtil.Substring(payload, StringUtil.GetLength(stopPrefix))
+        int targetSeparator = StringUtil.Find(request, "|")
+        if targetSeparator >= 0
+            int targetForm = StringUtil.Substring(request, targetSeparator + 1) as int
+            request = StringUtil.Substring(request, 0, targetSeparator)
+            if !TrackingCancellationMatches(targetForm)
+                Debug.Trace("[NirnCommand] Tracking rejected stale target cancellation request=" + request + " ref=" + targetForm)
+                return
+            endif
+        endif
         int requestNumber = request as int
         if requestNumber <= _trackingLastUIRequest || !Magelight.IsUIModeActive() || Magelight.GetUIModeView() != _viewId
             Debug.Trace("[NirnCommand] Tracking rejected stale cancellation request=" + request)

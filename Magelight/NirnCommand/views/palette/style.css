@@ -28,6 +28,7 @@ kbd { display:inline-flex; align-items:center; justify-content:center; min-width
 .empty { padding: 24px 12px 34px; color:#93929f; text-align:center; font-size:13px; }
 footer { display:flex; align-items:center; gap: 19px; padding: 12px 19px; border-top: 1px solid rgba(255,255,255,.08); color:#898a98; font-size:10px; }
 footer span { display:flex; gap:5px; align-items:center; }
+footer [hidden] { display:none; }
 .status { margin-left:auto; letter-spacing:.08em; font-size:10px; color:#c8ac7e; }
 .hint { width: min(680px,94vw); margin:12px auto; text-align:center; font-size:11px; color:rgba(232,218,191,.7); }
 .hint b { color:#d4b586; }

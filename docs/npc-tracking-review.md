@@ -7,9 +7,10 @@ NPC tracking is an experimental native quest marker. Install the ZIP as a mod in
 - Keep an unrelated quest and its marker active. Open Nirn Command, find a nearby living NPC and press Enter. Confirm the palette closes, gameplay resumes and the native marker points to that actor.
 - Reopen the palette, search for the actor and confirm the result says **Tracked**. Select the same actor again, then select another NPC and confirm only the second marker remains. Check the other quest and its marker throughout.
 - Search for **Stop tracking NPC**, activate it and confirm the marker disappears. Confirm the action is absent afterward. Repeat start and stop.
+- Track a nearby NPC, reopen the palette and activate their **Tracked** result. Confirm tracking stops. Repeat with Enter and with a mouse click. Check the footer hints while changing tabs and moving between results.
 - Track an actor, move beyond the configured World Search radius and cross exterior boundaries and an interior door. Observe whether the marker continues to identify the actor when their 3D unloads and after they move.
 - Save while tracking, load that save, and confirm the tracking quest and marker clear. Repeat with another save and check that no prior target carries over.
-- Test a dead or disabled actor where practical. Check the logs if selection or alias assignment fails. Note any NPC behavior changes, quest journal entries, notifications or sounds.
+- Confirm dead NPCs cannot be selected as new targets. Kill an already tracked actor and wait at least ten seconds to confirm the marker remains. Check the logs if selection or alias assignment fails. Note any NPC behavior changes, quest journal entries, notifications or sounds.
 - Repeat the marker checks with the active HUD replacement and with another supported runtime when available. Record observed behavior separately for each setup.
 
 ## Diagnostics

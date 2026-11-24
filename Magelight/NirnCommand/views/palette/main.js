@@ -5,6 +5,10 @@
   const resultsEl = document.querySelector('#results');
   const metaEl = document.querySelector('#meta');
   const statusEl = document.querySelector('#status');
+  const actionHint = document.querySelector('#action-hint');
+  const actionLabel = document.querySelector('#action-label');
+  const leftHint = document.querySelector('#left-hint');
+  const favoriteHint = document.querySelector('#favorite-hint');
   const prefix = 'nirn-command:v1:';
   let storageAvailable = false;
   try { localStorage.setItem(prefix + 'probe','1'); localStorage.removeItem(prefix + 'probe'); storageAvailable=true; } catch (_) {}
@@ -245,11 +249,27 @@
     for(const term of terms){let at=0;while((at=normalized.indexOf(term,at))!==-1){const start=offsets[at][0],end=offsets[at+term.length-1][1];for(let i=start;i<end;i++)marked[i]=true;at+=term.length;}}
     let start=0;while(start<text.length){let end=start+1;while(end<text.length && marked[end]===marked[start])end++;const part=text.slice(start,end);if(marked[start]){const mark=document.createElement('mark');mark.textContent=part;label.appendChild(mark);}else label.appendChild(document.createTextNode(part));start=end;}
   }
+  function updateActionHints() {
+    const entry=results[selected];
+    const actionable=!!entry && available(entry);
+    if(actionHint) actionHint.hidden=!actionable;
+    if(leftHint) leftHint.hidden=!actionable || entry.kind!=='Spell';
+    if(favoriteHint) favoriteHint.hidden=!actionable || entry.transient || (!entry.persistent && /^(item|spell):/.test(entry.action));
+    if(actionLabel && actionable) {
+      if(entry.kind==='NPC') actionLabel.textContent=entry.form===trackedForm ? 'Stop tracking' : 'Track';
+      else if(entry.action==='local:stop-tracking') actionLabel.textContent='Stop tracking';
+      else if(entry.kind==='Location') actionLabel.textContent='Open map';
+      else if(entry.kind==='Item') actionLabel.textContent='Equip or use';
+      else if(entry.kind==='Spell') actionLabel.textContent='Equip';
+      else actionLabel.textContent='Execute';
+    }
+  }
   function render() {
     const previous=results[selected]?.id; results=getResults();
     const retained=previous ? results.findIndex(e=>e.id===previous) : -1; selected=retained>=0?retained:0;
+    updateActionHints();
     if(categoryEl) Array.from(categoryEl.children).forEach((button,i)=>{button.classList.toggle('active',categories[i]===category);button.setAttribute('aria-pressed',String(categories[i]===category));});
-    metaEl.textContent = `${results.length} RESULTS · INVENTORY, SPELLS & ACTIONS`;
+    metaEl.textContent = `${results.length} RESULTS`;
     resultsEl.textContent = '';
     if (!results.length) { const empty = document.createElement('div'); empty.className='empty'; empty.textContent=category==='All'?'No results.':'No '+category.toLowerCase()+' found. Try another search or category.'; resultsEl.appendChild(empty); return; }
     const frag = document.createDocumentFragment();
@@ -266,6 +286,7 @@
       row.addEventListener('mouseenter',() => {
         if(selected!==i) cancelWorldRequest();
         selected=i;
+        updateActionHints();
         Array.from(resultsEl.children).forEach((node,index)=>{node.classList.toggle('selected',index===i);node.setAttribute('aria-selected',String(index===i));});
       });
       row.addEventListener('click',() => {if(selected!==i) cancelWorldRequest(); selected=i; execute(entry);}); frag.appendChild(row);
@@ -282,7 +303,10 @@
       return;
     }
     if(entry?.kind==='NPC') {
-      if(bridge && catalogSession && worldContext) bridge.send('world',`track|${catalogSession}|${worldContext}|${entry.token}|${++serial}`);
+      if(bridge && catalogSession && worldContext) {
+        if(trackedForm && entry.form===trackedForm) bridge.send('world',`stop-tracking|${catalogSession}|${worldContext}|${++serial}|${Number(trackedForm)|0}`);
+        else bridge.send('world',`track|${catalogSession}|${worldContext}|${entry.token}|${++serial}`);
+      }
       return;
     }
     if(entry && (entry.kind==='NPC' || entry.kind==='Location')) {
