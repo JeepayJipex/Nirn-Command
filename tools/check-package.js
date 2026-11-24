@@ -34,7 +34,7 @@ const html=entries.get('Magelight/NirnCommand/views/palette/index.html').toStrin
 if (!html.includes('src="./search.js"') || html.indexOf('src="./search.js"')>html.indexOf('src="./main.js"')) throw Error('Search module must load before palette');
 const manifest=JSON.parse(entries.get('Magelight/NirnCommand/manifest.json').toString('utf8'));
 if(manifest.version!=='0.5.0' || manifest.modId!=='NirnCommand' || manifest.views?.palette?.path!=='views/palette/index.html') throw Error('Invalid Magelight manifest');
-for(const name of ['docs/providers.md','docs/provider-v1.schema.json','examples/example-provider.json']) if(!entries.has(name)) throw Error('Missing provider documentation: '+name);
+for(const name of ['docs/providers.md','docs/provider-v1.schema.json','docs/npc-tracking-review.md','examples/example-provider.json']) if(!entries.has(name)) throw Error('Missing documentation: '+name);
 for(const name of ['docs/provider-v1.schema.json','examples/example-provider.json']) JSON.parse(entries.get(name).toString('utf8').replace(/^\uFEFF/,''));
 if([...entries.keys()].some(name=>name.startsWith('SKSE/Plugins/NirnCommand/Providers/'))) throw Error('Example provider must not be activated by default');
 console.log(`Archive has ${entries.size} entries; ESP, PEX, x64 DLL, SEQ, licenses and Magelight paths passed inspection.`);

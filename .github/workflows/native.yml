@@ -14,6 +14,8 @@ jobs:
           node tests/heartbeat.test.js
           node tests/categories.test.js
           node tests/world-catalog.test.js
+          node tests/tracking-ui.test.js
+          node tests/tracking-lifecycle.test.js
           node tests/palette.test.js
           node tests/editor.test.js
   build:

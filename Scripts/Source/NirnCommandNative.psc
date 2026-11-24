@@ -13,6 +13,11 @@ string Function LocationEntry(int index) Global Native
 Function LocationInspect(int token) Global Native
 string Function LocationInspection(int token) Global Native
 Function WorldOpenMap(int token) Global Native
+Function ResolveTrackingActor(int token, int context, int request) Global Native
+int Function NextTrackingRequest() Global Native
+int Function TrackingResolutionStatus(int request) Global Native
+Actor Function TrackingResolvedActor(int request) Global Native
+Function ClearTrackingResolution(int request) Global Native
 Function RefreshDiscovery() Global Native
 int Function DiscoveryRevision() Global Native
 int Function DiscoveryCount() Global Native

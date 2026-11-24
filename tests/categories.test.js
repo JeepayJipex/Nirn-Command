@@ -1,13 +1,17 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 class El {constructor(){this.children=[];this.listeners={};this.value='';this._text='';this.classList={toggle(){}};this.attrs={};}set textContent(v){this._text=String(v);this.children=[]}get textContent(){return this._text}append(...x){this.children.push(...x)}appendChild(x){if(x.fragment)this.children.push(...x.children);else this.children.push(x)}setAttribute(k,v){this.attrs[k]=v}addEventListener(k,f){this.listeners[k]=f}scrollIntoView(){}focus(){this.focused=true}}
 const input=new El(),results=new El(),categories=new El(),meta=new El(),status=new El(),handlers={};
-const document={querySelector:s=>({'#query':input,'#results':results,'#categories':categories,'#meta':meta,'#status':status})[s],createElement:()=>new El(),createDocumentFragment:()=>Object.assign(new El(),{fragment:true}),addEventListener:(k,f)=>handlers[k]=f};
+const actionHint=new El(),actionLabel=new El(),leftHint=new El(),favoriteHint=new El();
+const document={querySelector:s=>({'#query':input,'#results':results,'#categories':categories,'#meta':meta,'#status':status,'#action-hint':actionHint,'#action-label':actionLabel,'#left-hint':leftHint,'#favorite-hint':favoriteHint})[s],createElement:()=>new El(),createDocumentFragment:()=>Object.assign(new El(),{fragment:true}),addEventListener:(k,f)=>handlers[k]=f};
 const sent=[], timers=[], bridgeEvents={};
 const window={magelight:{send:(...args)=>sent.push(args),on:(name,fn)=>{bridgeEvents[name]=fn;}},NIRN_COMMANDS:[{id:'builtin:one',label:'Test action',kind:'Console',action:'console:tgm'}],NIRN_SCANNED_COMMANDS:[],NIRN_USER_COMMANDS:[]};
 vm.runInNewContext(fs.readFileSync('Magelight/NirnCommand/views/palette/search.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/world-catalog.js','utf8')+'\n'+fs.readFileSync('Magelight/NirnCommand/views/palette/main.js','utf8'),{window,document,localStorage:{getItem(){return null},setItem(){},removeItem(){}},console,requestAnimationFrame:f=>f(),setTimeout:(fn,ms)=>timers.push({fn,ms}),Date,Map,Set});
 const key=(key,extra={})=>{let prevented=false;handlers.keydown({key,code:key,preventDefault(){prevented=true},...extra});return prevented};
 window.ncCatalogBegin('1');window.ncAddEntry('item|1:0|game:item:x:1|Iron Sword');window.ncAddEntry('spell|1:1|game:spell:x:2|Fast Healing');window.ncCatalogComplete('1');
 assert.equal(categories.children.length,6);assert.equal(categories.children[0].attrs['aria-pressed'],'true');assert.ok(key('Tab'));assert.equal(categories.children[1].attrs['aria-pressed'],'true');assert.ok(input.focused);key('Tab');assert.equal(categories.children[2].attrs['aria-pressed'],'true');assert.equal(results.children[0].children[1].children[0].textContent,'Iron Sword');key('Tab');assert.equal(results.children[0].children[1].children[0].textContent,'Fast Healing');key('Tab',{shiftKey:true});assert.equal(categories.children[2].attrs['aria-pressed'],'true');categories.children[1].listeners.click();assert.equal(categories.children[1].attrs['aria-pressed'],'true');
+categories.children[2].listeners.click();assert.equal(actionLabel.textContent,'Equip or use');assert.equal(leftHint.hidden,true);assert.equal(favoriteHint.hidden,false);
+categories.children[3].listeners.click();assert.equal(actionLabel.textContent,'Equip');assert.equal(leftHint.hidden,false);assert.equal(favoriteHint.hidden,false);
+categories.children[4].listeners.click();assert.equal(actionHint.hidden,true);assert.equal(leftHint.hidden,true);assert.equal(favoriteHint.hidden,true);
 console.log('Category clicks, cycling, focus and empty-query catalogs passed.');
 
 // Exercise actual text-node rendering, including a decomposed accent.
@@ -38,11 +42,8 @@ assert.equal(results.children.length,2); assert.equal(results.children[0].childr
 key('Enter'); bridgeEvents.__uimode('0'); categories.children[4].listeners.click();
 assert.equal(results.children[0].children[1].children[1].textContent,'25 units · left');
 key('Enter');
-let msg=sent.at(-1)[1].split('|'); assert.equal(msg[0],'inspect');
-window.ncWorldInspect('save-one|1|npc|2|'+msg[5]+'|'+JSON.stringify({available:false}));
-assert.equal(results.children[0].children[1].children[1].textContent,'Temporarily unavailable');
-key('Enter'); msg=sent.at(-1)[1].split('|'); categories.children[2].listeners.click();
-window.ncWorldInspect('save-one|1|npc|2|'+msg[5]+'|'+JSON.stringify({available:true}));
+let msg=sent.at(-1)[1].split('|'); assert.equal(msg[0],'track');
+assert.equal(msg[3],'2'); categories.children[2].listeners.click();
 assert.equal(categories.children[2].attrs['aria-pressed'],'true');
 window.ncGameLoaded('save-two'); window.ncWorldComplete('save-one|1|npc|1|1');
 categories.children[4].listeners.click(); input.value=''; input.listeners.input(); assert.match(results.children[0].textContent,/No npcs/);
@@ -53,6 +54,7 @@ window.ncWorldEntry('save-two|2|location|1|1|0|'+JSON.stringify({id:'location:9'
 window.ncWorldComplete('save-two|2|location|1|1');
 categories.children[5].listeners.click(); input.value=''; input.listeners.input();
 assert.equal(results.children.length,1); assert.equal(results.children[0].children[1].children[0].textContent,'Whiterun');
+assert.equal(actionLabel.textContent,'Open map');assert.equal(leftHint.hidden,true);assert.equal(favoriteHint.hidden,true);
 input.value='white'; input.listeners.input();
 assert.equal(results.children.length,1); key('Enter'); msg=sent.at(-1)[1].split('|');
 window.ncWorldInspect('save-two|2|LOCATION|9|'+msg[5]+'|'+JSON.stringify({available:true,detail:'Skyrim'}));

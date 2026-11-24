@@ -5,6 +5,10 @@
   const resultsEl = document.querySelector('#results');
   const metaEl = document.querySelector('#meta');
   const statusEl = document.querySelector('#status');
+  const actionHint = document.querySelector('#action-hint');
+  const actionLabel = document.querySelector('#action-label');
+  const leftHint = document.querySelector('#left-hint');
+  const favoriteHint = document.querySelector('#favorite-hint');
   const prefix = 'nirn-command:v1:';
   let storageAvailable = false;
   try { localStorage.setItem(prefix + 'probe','1'); localStorage.removeItem(prefix + 'probe'); storageAvailable=true; } catch (_) {}
@@ -176,6 +180,18 @@
   const categories=['All','Actions','Items','Spells','NPCs','Locations'];
   const worldCatalog=window.NirnWorldCatalog?.create();
   let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldRequest=null;
+  let trackedForm='', trackingRevision=0;
+  let trackingMatchLog='';
+  const stopTracking={id:'tracking:stop',label:'Stop tracking NPC',kind:'Action',action:'local:stop-tracking',transient:true};
+  function reportTrackingMatch() {
+    if(!trackedForm) { trackingMatchLog=''; return; }
+    const matches=worldNpcs.filter(entry=>entry.form===trackedForm).length;
+    const summary=`${trackedForm}|${matches}`;
+    if(summary!==trackingMatchLog && bridge && catalogSession && worldContext) {
+      bridge.send('world',`tracking-ui|${catalogSession}|${worldContext}|${summary}|${worldNpcs.length}`);
+      trackingMatchLog=summary;
+    }
+  }
   function cancelWorldRequest() {
     if (!worldRequest) return;
     const item=[...worldNpcs,...worldLocations].find(entry=>entry.id===worldRequest.id);
@@ -186,7 +202,7 @@
   let indexedDiscovery=null, indexedOverrides=null, effectiveDiscovery=[];
   function eligible(entry) {return (category==='All' || category===({Item:'Items',Spell:'Spells',NPC:'NPCs',Location:'Locations'}[entry.kind] || 'Actions')) && (settings.showUnavailable!==false || available(entry));}
   function updateIndex() {
-    if(!indexedStatics){searchIndex.replace('static',statics);indexedStatics=true;}
+    if(!indexedStatics){searchIndex.replace('static',trackedForm ? [...statics,stopTracking] : statics);indexedStatics=true;}
     if(indexedCommands!==commands){searchIndex.replace('commands',commands.filter(supportedUserCommand));indexedCommands=commands;}
     if(indexedCatalog!==discovered){searchIndex.replace('catalog',discovered);indexedCatalog=discovered;}
     if(indexedNpcs!==worldNpcs){searchIndex.replace('npcs',worldNpcs);indexedNpcs=worldNpcs;}
@@ -233,11 +249,27 @@
     for(const term of terms){let at=0;while((at=normalized.indexOf(term,at))!==-1){const start=offsets[at][0],end=offsets[at+term.length-1][1];for(let i=start;i<end;i++)marked[i]=true;at+=term.length;}}
     let start=0;while(start<text.length){let end=start+1;while(end<text.length && marked[end]===marked[start])end++;const part=text.slice(start,end);if(marked[start]){const mark=document.createElement('mark');mark.textContent=part;label.appendChild(mark);}else label.appendChild(document.createTextNode(part));start=end;}
   }
+  function updateActionHints() {
+    const entry=results[selected];
+    const actionable=!!entry && available(entry);
+    if(actionHint) actionHint.hidden=!actionable;
+    if(leftHint) leftHint.hidden=!actionable || entry.kind!=='Spell';
+    if(favoriteHint) favoriteHint.hidden=!actionable || entry.transient || (!entry.persistent && /^(item|spell):/.test(entry.action));
+    if(actionLabel && actionable) {
+      if(entry.kind==='NPC') actionLabel.textContent=entry.form===trackedForm ? 'Stop tracking' : 'Track';
+      else if(entry.action==='local:stop-tracking') actionLabel.textContent='Stop tracking';
+      else if(entry.kind==='Location') actionLabel.textContent='Open map';
+      else if(entry.kind==='Item') actionLabel.textContent='Equip or use';
+      else if(entry.kind==='Spell') actionLabel.textContent='Equip';
+      else actionLabel.textContent='Execute';
+    }
+  }
   function render() {
     const previous=results[selected]?.id; results=getResults();
     const retained=previous ? results.findIndex(e=>e.id===previous) : -1; selected=retained>=0?retained:0;
+    updateActionHints();
     if(categoryEl) Array.from(categoryEl.children).forEach((button,i)=>{button.classList.toggle('active',categories[i]===category);button.setAttribute('aria-pressed',String(categories[i]===category));});
-    metaEl.textContent = `${results.length} RESULTS · INVENTORY, SPELLS & ACTIONS`;
+    metaEl.textContent = `${results.length} RESULTS`;
     resultsEl.textContent = '';
     if (!results.length) { const empty = document.createElement('div'); empty.className='empty'; empty.textContent=category==='All'?'No results.':'No '+category.toLowerCase()+' found. Try another search or category.'; resultsEl.appendChild(empty); return; }
     const frag = document.createDocumentFragment();
@@ -247,12 +279,14 @@
       const info=document.createElement('span'); info.className='info'; const label=document.createElement('span'); label.className='label'; highlight(label,entry.label,input.value);
       const detail=document.createElement('span'); detail.className='detail'; detail.textContent=entry.worldStatus || (available(entry) ? (entry.detail || '') : unavailableReason(entry)); info.append(label,detail);
       const star=document.createElement('button'); star.type='button'; star.className='favorite'; star.textContent=favorites.includes(entry.id) ? '★' : '☆'; star.setAttribute('aria-label','Toggle favorite'); star.addEventListener('click',event => {event.stopPropagation(); toggleFavorite(entry);});
-      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=entry.kind==='Location'?'Open general map':entry.kind || '';
+      const isTracked=entry.kind==='NPC' && entry.form===trackedForm;
+      const kind=document.createElement('span'); kind.className='kind' + (isTracked?' tracked':''); kind.textContent=isTracked?'Tracked':entry.kind==='Location'?'Open general map':entry.kind || '';
       if(entry.transient) star.disabled=true;
       row.append(icon,info,star,kind);
       row.addEventListener('mouseenter',() => {
         if(selected!==i) cancelWorldRequest();
         selected=i;
+        updateActionHints();
         Array.from(resultsEl.children).forEach((node,index)=>{node.classList.toggle('selected',index===i);node.setAttribute('aria-selected',String(index===i));});
       });
       row.addEventListener('click',() => {if(selected!==i) cancelWorldRequest(); selected=i; execute(entry);}); frag.appendChild(row);
@@ -264,6 +298,17 @@
     favorites = favorites.includes(entry.id) ? favorites.filter(id => id !== entry.id) : [entry.id,...favorites]; save('favorites',favorites); render();
   }
   function execute(entry, left=false) {
+    if(entry?.action==='local:stop-tracking') {
+      if(bridge && trackedForm && catalogSession && worldContext) bridge.send('world',`stop-tracking|${catalogSession}|${worldContext}|${++serial}`);
+      return;
+    }
+    if(entry?.kind==='NPC') {
+      if(bridge && catalogSession && worldContext) {
+        if(trackedForm && entry.form===trackedForm) bridge.send('world',`stop-tracking|${catalogSession}|${worldContext}|${++serial}|${Number(trackedForm)|0}`);
+        else bridge.send('world',`track|${catalogSession}|${worldContext}|${entry.token}|${++serial}`);
+      }
+      return;
+    }
     if(entry && (entry.kind==='NPC' || entry.kind==='Location')) {
       if (!bridge) {statusEl.textContent='Bridge unavailable';return;}
       cancelWorldRequest();
@@ -321,12 +366,23 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackedForm=''; trackingRevision=0; trackingMatchLog=''; indexedStatics=false; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncTrackingState = function(payload) {
+    const [session,revision,form]=String(payload).split('|');
+    const version=Number(revision);
+    if(!session || session!==catalogSession || !Number.isSafeInteger(version) || version<=trackingRevision || !/^-?\d+$/.test(form)) return;
+    trackingRevision=version;
+    const id=Number(form) >>> 0;
+    trackedForm=id ? String(id) : '';
+    reportTrackingMatch();
+    indexedStatics=false;
+    render();
+  };
   window.ncWorldContext = function(payload) {
     const [session,context]=String(payload).split('|');
     const revision=Number(context);
     if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
-    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; worldCatalog.reset(session,context); render();
+    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackingMatchLog=''; worldCatalog.reset(session,context); reportTrackingMatch(); render();
   };
   window.ncWorldBegin = function(payload) {
     const [session,context,kind,generation,attempt,count]=String(payload).split('|');
@@ -345,7 +401,7 @@
     const [session,context,kind,generation,attempt]=String(payload).split('|');
     if(!worldCatalog?.complete(session,context,kind,Number(generation),Number(attempt))) return;
     const entries=worldCatalog.entries(kind).map(row=>({...row,kind:kind==='npc'?'NPC':'Location',action:`world:${row.token}`,transient:true}));
-    if(kind==='npc') worldNpcs=entries; else worldLocations=entries;
+    if(kind==='npc') { worldNpcs=entries; reportTrackingMatch(); } else worldLocations=entries;
     render();
     if(bridge) bridge.send('world',`applied|${session}|${context}|${kind}|${generation}|${attempt}`);
   };

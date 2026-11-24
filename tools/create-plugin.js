@@ -10,7 +10,7 @@ const text = value => Buffer.from(value+'\0','ascii');
 const sub = (type,data) => Buffer.concat([Buffer.from(type,'ascii'),u16(data.length),data]);
 const record = (type,id,data) => Buffer.concat([Buffer.from(type,'ascii'),u32(data.length),u32(0),u32(id),u32(0),u16(44),u16(0),data]);
 const header = Buffer.concat([
-  sub('HEDR',hex('48e1da3f02000000630d0000')),
+  sub('HEDR',hex('48e1da3f03000000640d0000')),
   sub('CNAM',text('Nirn Command')),
   sub('MAST',text('Skyrim.esm')), sub('DATA',Buffer.alloc(8)), sub('INTV',u32(1))
 ]);
@@ -22,5 +22,14 @@ const quest=Buffer.concat([
   sub('FNAM',u32(0)), sub('ALFR',u32(0x14)), sub('VTCK',u32(0)), sub('ALED',Buffer.alloc(0))
 ]);
 const qrec=record('QUST',0x01000d62,quest);
-const group=Buffer.concat([Buffer.from('GRUP'),u32(qrec.length+24),Buffer.from('QUST'),u32(0),Buffer.alloc(8),qrec]);
+const trackingQuest=Buffer.concat([
+  sub('EDID',text('NC_NPCTracking')), sub('FULL',text('NPC Tracking')),
+  sub('DNAM',hex('000032ff0000000008000000')), sub('NEXT',Buffer.alloc(0)),
+  sub('QOBJ',u16(10)), sub('FNAM',u32(0)), sub('NNAM',text('Track the selected NPC')),
+  sub('QSTA',Buffer.concat([u32(0),u32(0)])), sub('ANAM',u32(1)),
+  sub('ALST',u32(0)), sub('ALID',text('Target')), sub('FNAM',u32(2)),
+  sub('VTCK',u32(0)), sub('ALED',Buffer.alloc(0))
+]);
+const trackingRecord=record('QUST',0x01000d63,trackingQuest);
+const group=Buffer.concat([Buffer.from('GRUP'),u32(qrec.length+trackingRecord.length+24),Buffer.from('QUST'),u32(0),Buffer.alloc(8),qrec,trackingRecord]);
 fs.writeFileSync(output,Buffer.concat([record('TES4',0,header),group]));

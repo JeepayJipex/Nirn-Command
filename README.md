@@ -4,7 +4,7 @@ Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with
 
 ## Installation
 
-1. Install `NirnCommand-v0.5.0-world-search-review.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+1. Install `NirnCommand-v0.5C.1-npc-tracking-review.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
 2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet is optional.
 3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
@@ -14,13 +14,13 @@ Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Item
 
 ## World search review
 
-The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Results show approximate distance, direction and available location. Activate a result to revalidate it in place. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
+The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Results show approximate distance, direction and available location. Press Enter to close the palette and track the selected NPC with a native quest marker. The result is labeled **Tracked** when tracking is confirmed. Activate that result again or search for **Stop tracking NPC** to clear it. Tracking continues if the actor dies after being selected, ends on save load and is independent of the search radius once started. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
 
 The Locations category shows up to eight recorded discoveries when the search is empty; type a name to search the full recorded list. It is deliberately restricted to discoveries observed after installing this version and successfully correlated to a marker reference. It does not infer discovery from a visible map marker or fast-travel availability. It stores confirmed references in the character's SKSE co-save and rechecks them after loading. Older discoveries are not imported. Correlation without opening the map, including on Solstheim and in mod-added worldspaces, needs in-game verification. If the engine's marker list does not contain a discovered marker at the event, that location is omitted and the native log records an unresolved event.
 
 Location results show their available worldspace. Activate **Open general map** to validate the location, release Nirn Command's pause and request the normal map. The action does not center the marker or start fast travel. World entries are not persisted as favorites or history.
 
-For an in-game review, check NPC validation and category navigation, then activate a discovered location and confirm the palette releases its pause before the general map opens. Also check movement to another cell, loading another save, a newly discovered marker before opening the map, Solstheim and a mod-added marker, shortcut-only opening, items and spells. Include `NirnCommandNative.log`, Papyrus and Magelight logs with the results. Compilation and automated tests do not verify these Skyrim runtime behaviors.
+See the [NPC tracking review checklist](docs/npc-tracking-review.md) for marker, replacement, save-load, unrelated quest and HUD checks, plus diagnostic instructions. Compilation and automated tests do not verify these Skyrim runtime behaviors.
 
 ## Actions and discovery
 
