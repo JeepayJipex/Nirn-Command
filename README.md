@@ -4,7 +4,7 @@ Nirn Command is a compact in-game command palette for Skyrim SE/AE. Open it with
 
 ## Installation
 
-1. Install `NirnCommand-v0.5C.1-npc-tracking-review.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
+1. Install `NirnCommand-v0.5C.2-known-locations-review.zip` as a separate mod in Mod Organizer 2. Enable `NirnCommand.esp` and disable older copies of Nirn Command so they do not override it.
 2. Install the versions of SKSE and Address Library matching your Skyrim executable. Magelight UI 1.9.2 or newer and PapyrusUtil are required. Console commands additionally need ConsoleUtilSSE NG. SkyrimNet is optional.
 3. Launch Skyrim through SKSE under MO2, load a save and press Insert. Use the palette entry **Nirn Command — Change opening shortcut** to set a different key, with optional left or right Shift, Ctrl and Alt. Page Up is reserved for Magelight's default host control. Escape closes the palette.
 
@@ -16,7 +16,9 @@ Use the category buttons or Tab / Shift+Tab to switch between All, Actions, Item
 
 The NPCs category searches nearby named, living humanoid actors currently processed by Skyrim. Results show approximate distance, direction and available location. Press Enter to close the palette and track the selected NPC with a native quest marker. The result is labeled **Tracked** when tracking is confirmed. Activate that result again or search for **Stop tracking NPC** to clear it. Tracking continues if the actor dies after being selected, ends on save load and is independent of the search radius once started. Actor results are temporary and cannot be added to favorites. The radius defaults to 8192 Skyrim units and can be adjusted as described in [the feasibility notes](docs/world-search-feasibility.md).
 
-The Locations category shows up to eight recorded discoveries when the search is empty; type a name to search the full recorded list. It is deliberately restricted to discoveries observed after installing this version and successfully correlated to a marker reference. It does not infer discovery from a visible map marker or fast-travel availability. It stores confirmed references in the character's SKSE co-save and rechecks them after loading. Older discoveries are not imported. Correlation without opening the map, including on Solstheim and in mod-added worldspaces, needs in-game verification. If the engine's marker list does not contain a discovered marker at the event, that location is omitted and the native log records an unresolved event.
+The Locations category searches named map markers currently visible to the player, including known locations revealed before installation and those without fast travel. With an empty query it shows up to eight entries. Import runs in batches after loading and as the player changes location. It progressively includes markers from worldspaces visited during the current session and revalidates known references. Entries absent from the current collection remain eligible while their references stay visible and valid. Previously recorded discoveries remain compatible with existing SKSE co-saves. The collection's coverage in other mod-added worldspaces and the import lifecycle require further in-game testing.
+
+This review build includes a Known Locations diagnostic for testing the player's current map marker collection. See [Known Locations diagnostic](docs/known-locations-diagnostic.md) for the test procedure and coverage limitations.
 
 Location results show their available worldspace. Activate **Open general map** to validate the location, release Nirn Command's pause and request the normal map. The action does not center the marker or start fast travel. World entries are not persisted as favorites or history.
 

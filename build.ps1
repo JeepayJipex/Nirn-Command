@@ -59,7 +59,7 @@ $dump = & $config.xDump -sse -q -check (Join-Path $build 'verify/NirnCommand.esp
 if ($LASTEXITCODE -ne 0 -or $dump -match '(?im)^.*(?:error:|exception|fatal).*$' -or $dump -notmatch 'Checking: GRUP Top "QUST"' -or $dump -notmatch 'All Done\.') { throw "xEdit check failed: $dump" }
 Set-Content -LiteralPath (Join-Path $build 'verify/xedit-check.log') -Value $dump -Encoding utf8
 New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot 'dist') | Out-Null
-$archive = Join-Path $PSScriptRoot 'dist/NirnCommand-v0.5C.1-npc-tracking-review.zip'
+$archive = Join-Path $PSScriptRoot 'dist/NirnCommand-v0.5C.2-known-locations-review.zip'
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -Force
 & node (Join-Path $PSScriptRoot 'tools/check-package.js') $archive
 if ($LASTEXITCODE -ne 0) { throw 'Archive validation failed' }

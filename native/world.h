@@ -8,6 +8,17 @@
 #include <vector>
 
 namespace nirn::world {
+inline bool eligibleLocation(std::uint32_t id, bool enabled, bool visible, bool named)
+{
+    return id && enabled && visible && named;
+}
+inline bool appendLocationCandidate(std::uint32_t id, std::unordered_set<std::uint32_t>& seen,
+    std::vector<std::uint32_t>& ids)
+{
+    if (!id || !seen.insert(id).second) return false;
+    ids.push_back(id);
+    return true;
+}
 struct ActorCandidate {
     std::uint32_t identity{};
     std::string name;

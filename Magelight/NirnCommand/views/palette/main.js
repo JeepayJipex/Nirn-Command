@@ -330,6 +330,7 @@
     if (entry?.action === 'local:commands' || entry?.action === 'local:hotkey' || entry?.action === 'local:providers') { if (entry.action === 'local:commands' && !commandsReady) {statusEl.textContent='Commands unavailable or still loading';return;} if(entry.action==='local:providers' && !overridesReady) {statusEl.textContent='Overrides unavailable or still loading';return;} if(editor) {if(bridge) bridge.send('__escapecapture','1'); editor.open(entry.action === 'local:hotkey' ? 'hotkey' : entry.action==='local:providers'?'provider':'command');} return; }
     if (entry?.action === 'local:toggle-unavailable') { settings.showUnavailable=settings.showUnavailable===false; save('settings',settings); statusEl.textContent=settings.showUnavailable ? 'Unavailable actions shown' : 'Unavailable actions hidden'; render(); return; }
     if (entry?.action === 'local:refresh') { if (bridge) { catalogRetries=0; bridge.send('catalog',catalogSession ? 'refresh|'+catalogSession : 'refresh'); statusEl.textContent='Loading…'; } return; }
+    if (entry?.action === 'local:diagnose-locations') { if (bridge && catalogSession) bridge.send('world','diagnose|'+catalogSession); return; }
     if (!entry || !bridge) { statusEl.textContent='Bridge unavailable'; return; }
     if (!available(entry)) { statusEl.textContent=unavailableReason(entry); return; }
     const action=left && entry.action.startsWith('spell:') ? entry.action.replace('spell:','spellleft:') : entry.action;
@@ -382,7 +383,7 @@
     const [session,context]=String(payload).split('|');
     const revision=Number(context);
     if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
-    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackingMatchLog=''; worldCatalog.reset(session,context); reportTrackingMatch(); render();
+    worldContext=context; worldNpcs=[]; worldRequest=null; trackingMatchLog=''; worldCatalog.reset(session,context); reportTrackingMatch(); render();
   };
   window.ncWorldBegin = function(payload) {
     const [session,context,kind,generation,attempt,count]=String(payload).split('|');

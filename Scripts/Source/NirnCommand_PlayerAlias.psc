@@ -102,6 +102,7 @@ Function Setup()
     RegisterForModEvent("Magelight_JS_commands", "OnCommands")
     RegisterForModEvent("Magelight_JS_overrides", "OnOverrides")
     RegisterForModEvent("Magelight_JS_world", "OnWorld")
+    RegisterForMenu("MapMenu")
     UnregisterForAllKeys()
     _hotkey = 210
     _hotkeyModifiers = 0
@@ -135,6 +136,12 @@ Event OnUpdate()
     RegisterForSingleUpdate(1.0)
 EndEvent
 
+Event OnMenuClose(string menuName)
+    if menuName == "MapMenu" && SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.RequestLocationRefresh()
+    endif
+EndEvent
+
 Function ServiceCatalog()
     if _serviceBusy
         return
@@ -166,6 +173,9 @@ Function ServiceCatalog()
         _worldRefreshedInPalette = false
     endif
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0 && (ownPalette || (!Magelight.IsUIModeActive() && !Utility.IsInMenuMode()))
+        if !ownPalette
+            NirnCommandNative.StepLocationProbe()
+        endif
         if (ownPalette && !_worldRefreshedInPalette) || (!ownPalette && now - _lastWorldRefresh >= 2.0)
             _lastWorldRefresh = now
             if ownPalette
@@ -668,6 +678,7 @@ Function PublishWorldNPCs()
 EndFunction
 
 Function PublishWorldLocations()
+    float publicationStarted = Utility.GetCurrentRealTime()
     int context = NirnCommandNative.WorldContext()
     int revision = NirnCommandNative.LocationRevision()
     if context < 1 || context != _worldContext || revision < 1 || revision == _locationRevision || _worldSending || Utility.GetCurrentRealTime() - _locationSentAt < 5.0
@@ -704,7 +715,7 @@ Function PublishWorldLocations()
     if i == total && view == _viewId && viewGeneration == _viewGeneration && session == _catalogSession && context == NirnCommandNative.WorldContext() && revision == NirnCommandNative.LocationRevision()
         Magelight.Call(view, "ncWorldComplete", session + "|" + context + "|location|" + revision + "|" + attempt)
         _locationSentAt = Utility.GetCurrentRealTime()
-        Debug.Trace("[NirnCommand] World locations published context=" + context + " revision=" + revision + " entries=" + total)
+        Debug.Trace("[NirnCommand] World locations published context=" + context + " revision=" + revision + " entries=" + total + " seconds=" + (Utility.GetCurrentRealTime() - publicationStarted))
     endif
     _worldSending = false
 EndFunction
@@ -862,6 +873,13 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     if (numArg as int) != _viewId || _viewId == 0 || SKSE.GetPluginVersion("NirnCommandNative") < 0
         return
     endif
+    if payload == "diagnose|" + _catalogSession && _catalogSession != ""
+        if ClosePalette()
+            NirnCommandNative.DiagnoseLocations()
+            Debug.Notification("Known Locations diagnostic started")
+        endif
+        return
+    endif
     string uiPrefix = "tracking-ui|" + _catalogSession + "|" + _worldContext + "|"
     if _worldContext > 0 && StringUtil.Find(payload, uiPrefix) == 0
         Debug.Trace("[NirnCommand] Tracking UI match context=" + _worldContext + " form|matches|entries=" + StringUtil.Substring(payload, StringUtil.GetLength(uiPrefix)))
@@ -932,9 +950,13 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     string mapPrefix = "map|" + _catalogSession + "|" + _worldContext + "|"
     if _worldContext > 0 && StringUtil.Find(payload, mapPrefix) == 0
         int mapToken = StringUtil.Substring(payload, StringUtil.GetLength(mapPrefix)) as int
+        string mapSession = _catalogSession
+        int mapContext = _worldContext
         if mapToken != 0 && ClosePalette()
             Utility.WaitMenuMode(0.1)
-            NirnCommandNative.WorldOpenMap(mapToken)
+            if mapSession == _catalogSession && mapContext == NirnCommandNative.WorldContext()
+                NirnCommandNative.WorldOpenMap(mapToken)
+            endif
         endif
         return
     endif

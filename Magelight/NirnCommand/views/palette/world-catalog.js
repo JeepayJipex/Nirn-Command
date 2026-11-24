@@ -7,7 +7,10 @@
   function create() {
     let session = '', context = '', sources = new Map();
     function reset(nextSession, nextContext) {
+      const sameSession = session && session === String(nextSession);
+      const locations = sameSession ? sources.get('location')?.entries : null;
       session = String(nextSession); context = String(nextContext); sources = new Map();
+      if (locations) sources.set('location', {generation: 0, entries: locations, pending: null});
     }
     function source(name) {
       if (!sources.has(name)) sources.set(name, {generation: 0, entries: [], pending: null});

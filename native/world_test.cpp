@@ -4,6 +4,16 @@
 int main()
 {
     using namespace nirn::world;
+    if (!eligibleLocation(42,true,true,true) || eligibleLocation(0,true,true,true) ||
+        eligibleLocation(42,false,true,true) || eligibleLocation(42,true,false,true) ||
+        eligibleLocation(42,true,true,false)) throw std::runtime_error("location eligibility failed");
+    std::unordered_set<std::uint32_t> markerIds;
+    std::vector<std::uint32_t> candidates;
+    if (!appendLocationCandidate(42,markerIds,candidates) || appendLocationCandidate(42,markerIds,candidates) ||
+        appendLocationCandidate(0,markerIds,candidates) || !appendLocationCandidate(0xFE001123,markerIds,candidates) ||
+        candidates.size()!=2 || candidates[0]!=42 || candidates[1]!=0xFE001123) {
+        throw std::runtime_error("location identity deduplication failed");
+    }
     ActorCandidate a{1, "Guard", 20, true, true, true, true, false, true};
     ActorCandidate b{2, "Guard", 10, true, true, true, true, false, true};
     auto far = a; far.identity = 3; far.distance = 101;
