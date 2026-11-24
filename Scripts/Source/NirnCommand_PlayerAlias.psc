@@ -942,9 +942,13 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     string mapPrefix = "map|" + _catalogSession + "|" + _worldContext + "|"
     if _worldContext > 0 && StringUtil.Find(payload, mapPrefix) == 0
         int mapToken = StringUtil.Substring(payload, StringUtil.GetLength(mapPrefix)) as int
+        string mapSession = _catalogSession
+        int mapContext = _worldContext
         if mapToken != 0 && ClosePalette()
             Utility.WaitMenuMode(0.1)
-            NirnCommandNative.WorldOpenMap(mapToken)
+            if mapSession == _catalogSession && mapContext == NirnCommandNative.WorldContext()
+                NirnCommandNative.WorldOpenMap(mapToken)
+            endif
         endif
         return
     endif

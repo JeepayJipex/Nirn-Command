@@ -21,6 +21,8 @@ std::vector<std::string> rows, transfer;
 std::unordered_map<std::uint32_t, RE::ObjectRefHandle> handles;
 std::unordered_map<std::uint32_t, std::string> inspections;
 std::unordered_set<RE::FormID> discoveredLocations;
+std::unordered_set<RE::FormID> knownLocations;
+std::atomic_uint64_t locationChanges{1};
 std::vector<std::string> locationRows, locationTransfer;
 std::unordered_map<RE::FormID,std::string> locationInspections;
 std::int32_t locationGeneration=0;
@@ -102,19 +104,92 @@ std::string locationRow(RE::TESObjectREFR* ref)
     return serialized;
 }
 
-void updateLocations(std::uint64_t request)
-{
+struct LocationImport {
+    std::uint64_t sessionId{}, changeId{};
+    RE::FormID cell{}, world{};
+    std::size_t markerCount{}, index{}, checked{}, excluded{}, duplicates{};
+    bool validating{};
+    std::unordered_set<RE::FormID> candidates, eligible;
     std::vector<RE::FormID> ids;
-    {std::scoped_lock lock(mutex); if (!locationsDirty || request!=session.load()) return; locationsDirty=false; ids.assign(discoveredLocations.begin(),discoveredLocations.end());}
-    std::sort(ids.begin(),ids.end());
-    std::vector<std::string> next;
-    for (auto id:ids) {
-        auto row=locationRow(RE::TESForm::LookupByID<RE::TESObjectREFR>(id));
-        if (!row.empty()) next.push_back(std::move(row));
+    std::vector<std::string> rows;
+    std::chrono::steady_clock::time_point started;
+    std::chrono::microseconds elapsed{}, maximumBatch{};
+};
+std::optional<LocationImport> locationImport;
+std::chrono::steady_clock::time_point lastLocationImport{};
+RE::FormID lastImportCell=0, lastImportWorld=0;
+std::uint64_t lastImportSession=0, lastImportChange=0;
+
+void importLocations(RE::PlayerCharacter* player, std::uint64_t request)
+{
+    if (!player || !player->GetParentCell() || request!=session.load()) return;
+    const auto now=std::chrono::steady_clock::now();
+    const auto cell=player->GetParentCell()->GetFormID();
+    const auto world=player->GetWorldspace() ? player->GetWorldspace()->GetFormID() : 0;
+    auto& markers=player->GetPlayerRuntimeData().currentMapMarkers;
+    const auto changes=locationChanges.load();
+    if (locationImport && (locationImport->sessionId!=request || locationImport->cell!=cell ||
+        locationImport->world!=world || locationImport->markerCount!=markers.size() || locationImport->changeId!=changes)) {
+        locationImport.reset();
     }
-    std::scoped_lock lock(mutex);
-    if (request!=session.load()) return;
-    if (locationRows!=next || !locationGeneration) {locationRows=std::move(next); ++locationGeneration;}
+    if (!locationImport) {
+        if (lastImportSession==request && lastImportCell==cell && lastImportWorld==world &&
+            lastImportChange==changes && now-lastLocationImport<std::chrono::seconds(30)) return;
+        locationImport.emplace();
+        auto& scan=*locationImport;
+        scan.sessionId=request; scan.changeId=changes; scan.cell=cell; scan.world=world;
+        scan.markerCount=markers.size(); scan.started=now;
+        {
+            std::scoped_lock lock(mutex);
+            if (request!=session.load()) { locationImport.reset(); return; }
+            scan.candidates=knownLocations;
+            scan.candidates.insert(discoveredLocations.begin(),discoveredLocations.end());
+        }
+        SKSE::log::info("Known locations import started source=currentMapMarkers world={:08X} cell={:08X} candidates={} coverage=progressive",world,cell,markers.size());
+    }
+    auto& scan=*locationImport;
+    const auto batchStart=std::chrono::steady_clock::now();
+    std::size_t processed=0;
+    while (processed<128 && std::chrono::steady_clock::now()-batchStart<std::chrono::milliseconds(1)) {
+        if (!scan.validating) {
+            if (scan.index==scan.markerCount) {
+                scan.ids.assign(scan.candidates.begin(),scan.candidates.end());
+                std::sort(scan.ids.begin(),scan.ids.end());
+                scan.index=0; scan.validating=true;
+                continue;
+            }
+            auto ref=markers[scan.index++].get();
+            ++processed;
+            if (!ref || !ref->GetFormID()) { ++scan.excluded; continue; }
+            if (!scan.candidates.insert(ref->GetFormID()).second) ++scan.duplicates;
+        } else {
+            if (scan.index==scan.ids.size()) break;
+            const auto id=scan.ids[scan.index++];
+            ++processed; ++scan.checked;
+            auto row=locationRow(RE::TESForm::LookupByID<RE::TESObjectREFR>(id));
+            if (row.empty()) { ++scan.excluded; continue; }
+            scan.eligible.insert(id);
+            scan.rows.push_back(std::move(row));
+        }
+    }
+    const auto duration=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-batchStart);
+    scan.elapsed+=duration;
+    scan.maximumBatch=(std::max)(scan.maximumBatch,duration);
+    if (!scan.validating || scan.index!=scan.ids.size()) return;
+    const auto publishStart=std::chrono::steady_clock::now();
+    const auto visible=scan.eligible.size();
+    {
+        std::scoped_lock lock(mutex);
+        if (request!=session.load() || scan.changeId!=locationChanges.load()) { locationImport.reset(); return; }
+        knownLocations=std::move(scan.eligible);
+        if (locationRows!=scan.rows || !locationGeneration) { locationRows=std::move(scan.rows); ++locationGeneration; }
+        locationsDirty=false;
+    }
+    const auto publication=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-publishStart);
+    lastImportSession=request; lastImportCell=cell; lastImportWorld=world; lastImportChange=changes;
+    lastLocationImport=std::chrono::steady_clock::now();
+    SKSE::log::info("Known locations import complete world={:08X} candidates={} checked={} visible={} excluded={} duplicates={} enumeration_us={} max_batch_us={} publication_us={} wall_ms={} coverage=progressive",world,scan.markerCount,scan.checked,visible,scan.excluded,scan.duplicates,scan.elapsed.count(),scan.maximumBatch.count(),publication.count(),std::chrono::duration_cast<std::chrono::milliseconds>(lastLocationImport-scan.started).count());
+    locationImport.reset();
 }
 
 class DiscoverySink : public RE::BSTEventSink<RE::LocationDiscovery::Event> {
@@ -133,7 +208,7 @@ public:
         auto found=nirn::world::uniqueDiscoveredMarker(matches);
         if (found) {
             std::scoped_lock lock(mutex);
-            if (discoveredLocations.insert(*found).second) locationsDirty=true;
+            if (discoveredLocations.insert(*found).second) { locationsDirty=true; ++locationChanges; }
         } else SKSE::log::warn("World location discovery unresolved matches={} world={}",matches.size(),event->worldspaceID ? event->worldspaceID : "unknown");
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -158,7 +233,7 @@ void revert(SKSE::SerializationInterface*)
     std::scoped_lock lock(mutex);
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
-    discoveredLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+    discoveredLocations.clear(); knownLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
     locationProbeRequested=false;
     SKSE::log::info("Known locations probe reset at save boundary");
 }
@@ -220,6 +295,7 @@ void reset(RE::StaticFunctionTag*)
     ++session;
     locationProbeRequested=false;
     std::scoped_lock lock(mutex);
+    knownLocations.clear();
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
 }
@@ -229,12 +305,16 @@ void diagnoseLocations(RE::StaticFunctionTag*)
 }
 void stepLocationProbe(RE::StaticFunctionTag*)
 {
-    if (!locationProbeRequested.load() || locationProbePending.exchange(true)) return;
+    if (locationProbePending.exchange(true)) return;
     const auto request=session.load();
     SKSE::GetTaskInterface()->AddTask([request] {
-        if (request==session.load() && locationProbeRequested.load()) {
-            probeLocations(RE::PlayerCharacter::GetSingleton(),request);
-            if (!locationProbe) locationProbeRequested=false;
+        if (request==session.load()) {
+            auto player=RE::PlayerCharacter::GetSingleton();
+            importLocations(player,request);
+            if (locationProbeRequested.load()) {
+                probeLocations(player,request);
+                if (!locationProbe) locationProbeRequested=false;
+            }
         }
         locationProbePending=false;
     });
@@ -299,7 +379,6 @@ void refresh(RE::StaticFunctionTag*)
         const auto started=std::chrono::steady_clock::now();
         auto player=RE::PlayerCharacter::GetSingleton(); auto processes=RE::ProcessLists::GetSingleton();
         if (!player || !processes || !player->GetParentCell()) { pending=false; return; }
-        updateLocations(request);
         auto cell=player->GetParentCell()->GetFormID();
         auto world=player->GetWorldspace() ? player->GetWorldspace()->GetFormID() : 0;
         struct Item { float distance; std::uint32_t token; std::string row; RE::ObjectRefHandle handle; };
@@ -374,7 +453,7 @@ void inspectLocation(RE::StaticFunctionTag*,std::int32_t id)
     auto token=static_cast<RE::FormID>(id); auto request=session.load();
     {std::scoped_lock lock(mutex); locationInspections.erase(token);}
     SKSE::GetTaskInterface()->AddTask([request,token] {
-        bool known=false; {std::scoped_lock lock(mutex); known=discoveredLocations.contains(token);}
+        bool known=false; {std::scoped_lock lock(mutex); known=knownLocations.contains(token);}
         auto row=known ? locationRow(RE::TESForm::LookupByID<RE::TESObjectREFR>(token)) : std::string{};
         nlohmann::json result={{"available",!row.empty()}};
         if (!row.empty()) result["detail"]=nlohmann::json::parse(row)["detail"];
@@ -390,7 +469,7 @@ void openMap(RE::StaticFunctionTag*,std::int32_t id)
 {
     const auto token=static_cast<RE::FormID>(id); const auto request=session.load();
     SKSE::GetTaskInterface()->AddTask([request,token] {
-        bool known=false; {std::scoped_lock lock(mutex); known=request==session.load() && discoveredLocations.contains(token);}
+        bool known=false; {std::scoped_lock lock(mutex); known=request==session.load() && knownLocations.contains(token);}
         if (!known || locationRow(RE::TESForm::LookupByID<RE::TESObjectREFR>(token)).empty()) return;
         auto queue=RE::UIMessageQueue::GetSingleton();
         auto ui=RE::UI::GetSingleton();

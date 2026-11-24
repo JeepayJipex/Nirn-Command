@@ -383,7 +383,7 @@
     const [session,context]=String(payload).split('|');
     const revision=Number(context);
     if(!worldCatalog || !session || session!==catalogSession || !Number.isSafeInteger(revision) || revision<1 || revision<=Number(worldContext || 0)) return;
-    worldContext=context; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackingMatchLog=''; worldCatalog.reset(session,context); reportTrackingMatch(); render();
+    worldContext=context; worldNpcs=[]; worldRequest=null; trackingMatchLog=''; worldCatalog.reset(session,context); reportTrackingMatch(); render();
   };
   window.ncWorldBegin = function(payload) {
     const [session,context,kind,generation,attempt,count]=String(payload).split('|');
