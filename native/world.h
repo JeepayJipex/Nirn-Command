@@ -9,6 +9,11 @@
 
 namespace nirn::world {
 enum class MapReadiness { wait, cancel, fallback, match };
+template <class State>
+bool worldMapCameraReady(const State* current, const State* firstWorld, const State* secondWorld)
+{
+    return current && (current==firstWorld || current==secondWorld);
+}
 inline MapReadiness mapReadiness(bool currentRequest, bool sameSave, bool timedOut,
     bool opened, bool menuOpen, bool ready, bool sameWorld)
 {

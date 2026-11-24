@@ -4,6 +4,12 @@
 int main()
 {
     using namespace nirn::world;
+    int transition=1, worldA=2, worldB=3;
+    if (worldMapCameraReady(&transition,&worldA,&worldB) ||
+        worldMapCameraReady<int>(nullptr,&worldA,&worldB) ||
+        !worldMapCameraReady(&worldA,&worldA,&worldB) ||
+        !worldMapCameraReady(&worldB,&worldA,&worldB))
+        throw std::runtime_error("map camera readiness failed");
     if (mapReadiness(true,true,false,false,false,false,false)!=MapReadiness::wait ||
         mapReadiness(true,true,false,true,true,false,false)!=MapReadiness::wait ||
         mapReadiness(true,true,true,true,true,false,false)!=MapReadiness::fallback ||

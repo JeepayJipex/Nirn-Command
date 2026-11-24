@@ -521,7 +521,7 @@ std::int32_t openMap(RE::StaticFunctionTag*, std::int32_t id, std::int32_t expec
         cancelMap("superseded");
         serial=++mapSerial;
         if (!serial) serial=++mapSerial;
-        mapRequest=MapRequest{serial,saveSession,token,0,0,std::chrono::steady_clock::now()+std::chrono::seconds(2)};
+        mapRequest=MapRequest{serial,saveSession,token,0,0,std::chrono::steady_clock::now()+std::chrono::seconds(8)};
     }
     SKSE::log::info("Map selected request={} form={:08X}",serial,token);
     SKSE::GetTaskInterface()->AddTask([serial,saveSession,token,expectedContext] {
@@ -583,6 +583,10 @@ std::int32_t stepMap(RE::StaticFunctionTag*, std::int32_t requestId)
             }
             if (readiness==nirn::world::MapReadiness::cancel) { cancelMap("map closed"); return; }
             if (readiness==nirn::world::MapReadiness::fallback) { cancelMap("timeout or unsupported worldspace; general map"); return; }
+            const auto& camera=data->camera;
+            const auto state=camera.currentState.get();
+            const bool worldCamera=nirn::world::worldMapCameraReady<RE::TESCameraState>(state,camera.unk68[0].get(),camera.unk68[1].get());
+            if (!worldCamera) { mapRequest->waiting="world map camera transition"; return; }
             const auto& markers=data->mapMarkers;
             if (markers.size()>8192) { cancelMap("marker limit; general map"); return; }
             auto match=nirn::world::matchMapMarker(markers,mapRequest->handle);
