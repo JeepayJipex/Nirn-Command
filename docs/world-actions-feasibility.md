@@ -7,7 +7,7 @@ This discovery is based on main at `7935e357` and source inspection. The user re
 | Feature | Decision | Remaining gate |
 | --- | --- | --- |
 | NPC tracking | Conditional go for a vanilla quest prototype | Verify marker, actor and quest behavior in game |
-| Earlier discoveries | No go for a complete import until discovery evidence is established | Prove a read-only, bounded source of per-save discovery |
+| Known Locations | Conditional go for a runtime-visible marker prototype | Validate bounded enumeration, visibility, worldspace coverage and performance |
 | Map positioning | Conditional go for a menu prototype | Verify readiness, reference matching and camera movement |
 
 ## 1. Temporary NPC tracking
@@ -28,23 +28,25 @@ Automated coverage should check quest records, single-target replacement, invali
 
 **Go** when the correct native marker follows ordinary transitions, replacement and cleanup work, and actor and unrelated quest behavior remain acceptable without unwanted announcements. **No go** if those conditions fail. A custom HUD marker would require invasive compatibility work and is an alternative for separate review.
 
-## 2. Importing earlier discovered locations
+## 2. Known Locations import
 
 ### Sources and limitations
 
-The pinned CommonLib fork exposes `PlayerCharacter::GetPlayerRuntimeData().currentMapMarkers`, a `BSTArray<ObjectRefHandle>`, and `mapMarkerIterator`. `ExtraMapMarker::mapData` exposes `kVisible`, `kCanTravelTo` and `kShowAllHidden`. These flags describe current marker state and do not prove how it arose. A plugin may author visible or travel-enabled markers, and a quest may reveal a location. `mapMarkerIterator` is not established as a discovery-history API. [PlayerCharacter](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/P/PlayerCharacter.h) · [ExtraMapMarker](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/E/ExtraMapMarker.h)
+Known Locations includes named, valid locations currently visible on the player's map, including those revealed by quests or mods before installation. Fast travel availability is irrelevant. Exclude hidden, disabled, deleted, unresolved and unnamed markers. Revalidate visibility during publication and action execution so markers hidden after enumeration disappear. Never modify marker flags. The relationship between engine flags and the actual map display requires runtime validation.
 
-Dylbills Papyrus Functions implements `GetCurrentMapMarkerRefs` using the player's current array. Its `GetAllMapMarkerRefs` scans `TESForm::GetAllForms()` under a read lock and filters marker flags. The current collection is described as applicable to the current worldspace or interior cell grid, so its completeness across DLC and mod worldspaces is unproven. The global scan is potentially expensive and still cannot establish discovery history. Persistent-cell traversal is another candidate for enumeration, with unproven coverage and the same evidence problem. A dependency-free probe is possible using the existing DLL. A reliable complete dependency-free import is not established. [Dylbill source](https://github.com/Dylbill-Iroh/DbSkseFunctions/blob/fc588406a825969b78a7b42c1a5a63d01f000e96/DbSkseFunctions/src/MapMarker.cpp#L291-L529)
+The pinned CommonLib fork exposes `PlayerCharacter::GetPlayerRuntimeData().currentMapMarkers`, a `BSTArray<ObjectRefHandle>`, and `mapMarkerIterator`. `ExtraMapMarker::mapData` exposes `kVisible`, `kCanTravelTo` and `kShowAllHidden`. Use current visibility as the candidate eligibility signal without filtering on `kCanTravelTo`. Special visibility states and map replacements require runtime validation. `mapMarkerIterator` is not established as an all-worldspaces enumeration API. [PlayerCharacter](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/P/PlayerCharacter.h) · [ExtraMapMarker](https://github.com/MinLL/CommonLibVR/blob/550cc4fb9114649dcf526d1f3d73d710c5d7003b/include/RE/E/ExtraMapMarker.h)
 
-The existing event sink correlates `LocationDiscovery::Event::mapMarkerData` with a unique entry in the current array. It persists confirmed IDs in the `NCL1` SKSE record and uses `ResolveFormID` on load. Existing rows are filtered for valid visible references. Earlier events cannot be reconstructed from this co-save.
+Dylbills Papyrus Functions implements `GetCurrentMapMarkerRefs` using the player's current array. Its `GetAllMapMarkerRefs` scans `TESForm::GetAllForms()` under a read lock and filters marker flags. The current collection is described as applicable to the current worldspace or interior cell grid, so its completeness across DLC and mod worldspaces is unproven. The global scan is potentially expensive. Persistent-cell traversal is another candidate for enumeration with unproven coverage. A dependency-free probe is possible using the existing DLL. Complete dependency-free coverage remains unverified. [Dylbill source](https://github.com/Dylbill-Iroh/DbSkseFunctions/blob/fc588406a825969b78a7b42c1a5a63d01f000e96/DbSkseFunctions/src/MapMarker.cpp#L291-L529)
+
+The existing event sink correlates `LocationDiscovery::Event::mapMarkerData` with a unique entry in the current array. It persists confirmed IDs in the `NCL1` SKSE record and uses `ResolveFormID` on load. Retain the distinction between event-confirmed discoveries and runtime-visible candidates internally where useful. Both are eligible only while currently visible and valid. A remembered ID alone must never authorize exposing a hidden marker.
 
 ### Probe, integration and gate
 
-On a pre-install save, log IDs and flags before opening the map, after opening it and after changing worldspaces. Compare a visited marker, a quest-revealed unvisited marker and a plugin-authored visible, travel-enabled marker. Repeat in Skyrim, Solstheim and a mod-added worldspace. Measure collection size and time. Seek an independently documented per-save discovery source before treating candidates as discovered.
+On a pre-install save, log IDs and flags before opening the map, after opening it and after changing worldspaces. Compare a visited marker, a quest-revealed unvisited marker, a mod-visible marker, a visible marker without fast travel and hidden markers. Confirm inclusion matches the player's map without changing flags. Repeat in Skyrim, Solstheim, an interior and a mod-added worldspace. Measure collection size, per-batch time and frame impact. Check a second save with different visibility and revisit a worldspace after visibility changes.
 
-If evidence supports import, enumerate in bounded game-thread batches after load and relevant world transitions, away from palette opening and search. Merge proven IDs with event discoveries, preserve `ResolveFormID`, co-save compatibility, deduplication, session cancellation and atomic revision publication. Review the existing 40,000-byte record limit before increasing capacity. Existing Papyrus and UI catalog interfaces can remain in use. Add tests for duplicates, old records, removed plugins, remapping, cancellation and flags remaining unchanged.
+Enumerate candidates in bounded game-thread batches after load and relevant world transitions, away from palette opening and search. Merge visible candidates with event-confirmed IDs, deduplicate by resolved identity and revalidate visibility before publication and action. Preserve save isolation, `ResolveFormID`, co-save compatibility, session cancellation and atomic revision publication. Clear stale candidates at save boundaries and do not assume a previously visible marker stays visible. Review the existing 40,000-byte record limit before increasing persistent capacity. Existing Papyrus and UI catalog interfaces can remain in use, with user-facing terminology updated to Known Locations as needed. Add tests for visible markers with and without fast travel, revealed and mod-visible markers, hidden or newly hidden markers, duplicates, old records, removed plugins, remapping, save changes, cancellation and unchanged flags.
 
-**Go** only with positive discovery evidence and bounded enumeration. Partial coverage may be imported progressively if its evidence is sound. **No go** if visible or travel flags are the only evidence, or if enumeration causes unacceptable frame stalls. Continue recording discovery events in that case.
+**Go** when runtime visibility matches the player's map, hidden markers stay excluded, enumeration is bounded and measured performance is acceptable. Progressive import on worldspace transitions is acceptable with its coverage documented. **No go** for a path that exposes hidden markers, mixes saves or produces unacceptable frame stalls. Retain the event-based catalog while investigating uncovered worldspaces.
 
 ## 3. Precise map positioning
 
@@ -65,7 +67,7 @@ The smallest smoke test selects one known marker in the current world and observ
 ## Increment order
 
 1. Prototype and validate the NPC quest before integrating its palette action.
-2. Probe marker enumeration and discovery evidence before implementing any import.
+2. Probe runtime visibility, marker enumeration, worldspace coverage and performance before implementing Known Locations import.
 3. Prototype same-world map positioning, then add readiness and fallback handling after validation.
 
 Record the game and SKSE versions, active HUD and map replacements, logs and observed results for each smoke test. Automated checks do not establish in-game compatibility.
