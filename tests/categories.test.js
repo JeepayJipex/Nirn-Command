@@ -71,6 +71,12 @@ for(let i=0;i<10;i++) window.ncWorldEntry('save-two|2|location|2|2|'+i+'|'+JSON.
 window.ncWorldComplete('save-two|2|location|2|2');
 input.value=''; input.listeners.input(); assert.equal(results.children.length,8);
 input.value='site 9'; input.listeners.input(); assert.equal(results.children.length,1);
+window.ncWorldContext('save-two|3');
+assert.equal(results.children.length,1);
+window.ncWorldBegin('save-two|3|location|2|3|1');
+window.ncWorldEntry('save-two|3|location|2|3|0|'+JSON.stringify({id:'location:9',token:'10',label:'Site 9',detail:'Skyrim'}));
+window.ncWorldComplete('save-two|3|location|2|3');
+assert.equal(results.children.length,1);
 input.value=''; input.listeners.input(); categories.children[0].listeners.click();
 assert.ok(!results.children.some(row=>row.children[1]?.children[0]?.textContent?.startsWith('Site ')));
 console.log('World categories, details, unavailable references and save isolation passed.');
