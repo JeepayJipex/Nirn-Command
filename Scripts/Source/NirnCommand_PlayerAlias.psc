@@ -45,7 +45,6 @@ int _locationAttempt
 float _npcSentAt
 float _locationSentAt
 int _trackingEpoch
-int _trackingRequest
 int _trackingLastUIRequest
 int _trackingOwner
 bool _trackingBusy
@@ -748,8 +747,7 @@ Function PublishTracking()
 EndFunction
 
 Function TrackNPC(int token, int context, string request, string session, int viewGeneration, int operation)
-    _trackingRequest += 1
-    int nativeRequest = _trackingRequest
+    int nativeRequest = NirnCommandNative.NextTrackingRequest()
     Debug.Trace("[NirnCommand] Tracking request=" + request + " session=" + session + " context=" + context + " token=" + token)
     if !ClosePalette()
         Debug.Trace("[NirnCommand] Tracking failed to release palette request=" + request)

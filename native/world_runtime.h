@@ -17,6 +17,7 @@ void inspectLocation(RE::StaticFunctionTag*, std::int32_t);
 RE::BSFixedString locationInspection(RE::StaticFunctionTag*, std::int32_t);
 void openMap(RE::StaticFunctionTag*, std::int32_t);
 void resolveTrackingActor(RE::StaticFunctionTag*, std::int32_t, std::int32_t, std::int32_t);
+std::int32_t nextTrackingRequest(RE::StaticFunctionTag*);
 std::int32_t trackingResolutionStatus(RE::StaticFunctionTag*, std::int32_t);
 RE::Actor* trackingResolvedActor(RE::StaticFunctionTag*, std::int32_t);
 void clearTrackingResolution(RE::StaticFunctionTag*, std::int32_t);

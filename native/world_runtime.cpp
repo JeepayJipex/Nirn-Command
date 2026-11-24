@@ -12,6 +12,7 @@ namespace {
 std::mutex mutex;
 std::atomic_uint64_t session{1};
 std::atomic_bool pending{false};
+std::atomic_uint32_t trackingSerial{0};
 std::int32_t trackingRequest=0, trackingStatus=0;
 RE::NiPointer<RE::Actor> trackingActor;
 std::int32_t contextId=0, generation=0;
@@ -153,6 +154,12 @@ void reset(RE::StaticFunctionTag*)
     std::scoped_lock lock(mutex);
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+}
+std::int32_t nextTrackingRequest(RE::StaticFunctionTag*)
+{
+    auto value=++trackingSerial;
+    if (!value) value=++trackingSerial;
+    return static_cast<std::int32_t>(value);
 }
 void resolveTrackingActor(RE::StaticFunctionTag*, std::int32_t id, std::int32_t expectedContext, std::int32_t requestId)
 {
