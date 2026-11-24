@@ -253,6 +253,7 @@ Event OnDomReady(string eventName, string strArg, float numArg, Form sender)
         _viewGeneration += 1
         _domReady = false
         _viewId = 0
+        _connecting = false
         Connect()
     endif
 EndEvent
@@ -262,25 +263,31 @@ Function Connect()
         return
     endif
     _connecting = true
+    int generation = _viewGeneration
     if !Magelight.RegisterMod("NirnCommand", "Nirn Command")
-        _connecting = false
+        if generation == _viewGeneration
+            _connecting = false
+        endif
         return
     endif
-    _viewId = Magelight.FindView("NirnCommand", "palette")
-    if _viewId > 0
-        bool catalogReady = Magelight.RegisterListener(_viewId, "catalog")
-        bool executeReady = Magelight.RegisterListener(_viewId, "execute")
-        bool persistReady = Magelight.RegisterListener(_viewId, "persist")
-        bool hotkeyReady = Magelight.RegisterListener(_viewId, "hotkey")
-        bool commandsReady = Magelight.RegisterListener(_viewId, "commands")
-        bool overridesReady = Magelight.RegisterListener(_viewId, "overrides")
-        bool worldReady = Magelight.RegisterListener(_viewId, "world")
+    int view = Magelight.FindView("NirnCommand", "palette")
+    if view > 0
+        bool catalogReady = Magelight.RegisterListener(view, "catalog")
+        bool executeReady = Magelight.RegisterListener(view, "execute")
+        bool persistReady = Magelight.RegisterListener(view, "persist")
+        bool hotkeyReady = Magelight.RegisterListener(view, "hotkey")
+        bool commandsReady = Magelight.RegisterListener(view, "commands")
+        bool overridesReady = Magelight.RegisterListener(view, "overrides")
+        bool worldReady = Magelight.RegisterListener(view, "world")
+        if generation != _viewGeneration
+            return
+        endif
         if !catalogReady || !executeReady || !persistReady || !hotkeyReady || !commandsReady || !overridesReady || !worldReady
             Debug.Trace("[NirnCommand] Listener registration failed: " + Magelight.GetLastError("NirnCommand"))
-            _viewId = 0
             _connecting = false
             return
         endif
+        _viewId = view
         _catalogSession = _viewGeneration + "-" + _epoch + "-" + Utility.GetCurrentRealTime()
         _trackingLastUIRequest = 0
         _worldContext = 0
@@ -294,7 +301,9 @@ Function Connect()
         Magelight.Call(_viewId, "ncBridgeReady", "")
         Debug.Trace("[NirnCommand] Bridge ready, view " + _viewId)
     endif
-    _connecting = false
+    if generation == _viewGeneration
+        _connecting = false
+    endif
 EndFunction
 
 Function SendCapabilities()
