@@ -489,6 +489,6 @@
     if (bridge && catalogSession) bridge.send('catalog','tick|'+catalogSession);
     setTimeout(()=>heartbeat(serial),1000);
   }
-  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; worldRequest=null; if(editor?.isOpen()) editor.hide();} });
+  if (bridge) bridge.on('__uimode',state=>{ isOpen=state==='1'; heartbeatSerial++; if(isOpen) {open(); heartbeat(heartbeatSerial);} else {heldModifiers=0; cancelWorldRequest(); if(editor?.isOpen()) editor.hide();} });
   render();
 })();
