@@ -26,7 +26,6 @@ std::atomic_uint64_t locationChanges{1};
 std::vector<std::string> locationRows, locationTransfer;
 std::unordered_map<RE::FormID,std::string> locationInspections;
 std::int32_t locationGeneration=0;
-bool locationsDirty=true;
 constexpr std::uint32_t recordType=0x4E434C31;
 constexpr std::size_t maxLocationRecordEntries=10000;
 
@@ -93,7 +92,7 @@ std::string locationRow(RE::TESObjectREFR* ref)
     auto extra=ref->extraList.GetByType<RE::ExtraMapMarker>();
     if (!extra || !extra->mapData || !extra->mapData->flags.any(RE::MapMarkerData::Flag::kVisible)) return {};
     const char* name=extra->mapData->locationName.GetFullName();
-    if (!name || !*name) return {};
+    if (!ref->GetFormID() || !name || !*name) return {};
     auto world=ref->GetWorldspace();
     const char* worldName=world ? world->GetName() : nullptr;
     std::string place=worldName && *worldName ? worldName : "Worldspace unavailable";
@@ -183,7 +182,6 @@ void importLocations(RE::PlayerCharacter* player, std::uint64_t request)
         if (request!=session.load() || scan.changeId!=locationChanges.load()) { locationImport.reset(); return; }
         knownLocations=std::move(scan.eligible);
         if (locationRows!=scan.rows || !locationGeneration) { locationRows=std::move(scan.rows); ++locationGeneration; }
-        locationsDirty=false;
     }
     const auto publication=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-publishStart);
     lastImportSession=request; lastImportCell=cell; lastImportWorld=world; lastImportChange=changes;
@@ -208,7 +206,7 @@ public:
         auto found=nirn::world::uniqueDiscoveredMarker(matches);
         if (found) {
             std::scoped_lock lock(mutex);
-            if (discoveredLocations.insert(*found).second) { locationsDirty=true; ++locationChanges; }
+            if (discoveredLocations.insert(*found).second) ++locationChanges;
         } else SKSE::log::warn("World location discovery unresolved matches={} world={}",matches.size(),event->worldspaceID ? event->worldspaceID : "unknown");
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -233,7 +231,7 @@ void revert(SKSE::SerializationInterface*)
     std::scoped_lock lock(mutex);
     trackingRequest=trackingStatus=0; trackingActor.reset();
     currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear();
-    discoveredLocations.clear(); knownLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+    discoveredLocations.clear(); knownLocations.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0;
     locationProbeRequested=false;
     SKSE::log::info("Known locations probe reset at save boundary");
 }
@@ -297,8 +295,9 @@ void reset(RE::StaticFunctionTag*)
     std::scoped_lock lock(mutex);
     knownLocations.clear();
     trackingRequest=trackingStatus=0; trackingActor.reset();
-    currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0; locationsDirty=true;
+    currentCell=currentWorld=0; contextId=0; generation=0; rows.clear(); transfer.clear(); handles.clear(); inspections.clear(); locationRows.clear(); locationTransfer.clear(); locationInspections.clear(); locationGeneration=0;
 }
+void requestLocationRefresh(RE::StaticFunctionTag*) { ++locationChanges; }
 void diagnoseLocations(RE::StaticFunctionTag*)
 {
     locationProbeRequested=true;

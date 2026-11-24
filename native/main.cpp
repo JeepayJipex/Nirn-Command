@@ -242,6 +242,7 @@ namespace {
         vm->RegisterFunction("WorldReset", "NirnCommandNative", nirn::world_runtime::reset);
         vm->RegisterFunction("WorldRefresh", "NirnCommandNative", nirn::world_runtime::refresh);
         vm->RegisterFunction("DiagnoseLocations", "NirnCommandNative", nirn::world_runtime::diagnoseLocations);
+        vm->RegisterFunction("RequestLocationRefresh", "NirnCommandNative", nirn::world_runtime::requestLocationRefresh);
         vm->RegisterFunction("StepLocationProbe", "NirnCommandNative", nirn::world_runtime::stepLocationProbe);
         vm->RegisterFunction("WorldContext", "NirnCommandNative", nirn::world_runtime::context);
         vm->RegisterFunction("WorldRevision", "NirnCommandNative", nirn::world_runtime::revision);

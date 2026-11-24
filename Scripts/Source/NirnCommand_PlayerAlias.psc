@@ -102,6 +102,7 @@ Function Setup()
     RegisterForModEvent("Magelight_JS_commands", "OnCommands")
     RegisterForModEvent("Magelight_JS_overrides", "OnOverrides")
     RegisterForModEvent("Magelight_JS_world", "OnWorld")
+    RegisterForMenu("MapMenu")
     UnregisterForAllKeys()
     _hotkey = 210
     _hotkeyModifiers = 0
@@ -133,6 +134,12 @@ EndFunction
 Event OnUpdate()
     ServiceCatalog()
     RegisterForSingleUpdate(1.0)
+EndEvent
+
+Event OnMenuClose(string menuName)
+    if menuName == "MapMenu" && SKSE.GetPluginVersion("NirnCommandNative") >= 0
+        NirnCommandNative.RequestLocationRefresh()
+    endif
 EndEvent
 
 Function ServiceCatalog()
