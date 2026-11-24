@@ -46,9 +46,11 @@ float _npcSentAt
 float _locationSentAt
 int _trackingEpoch
 int _trackingRequest
+int _trackingLastUIRequest
 int _trackingOwner
 bool _trackingBusy
 Actor _trackedActor
+bool _trackingConfirmed
 float _lastTrackingCheck
 
 Event OnInit()
@@ -145,10 +147,15 @@ Function ServiceCatalog()
         Connect()
     endif
     float now = Utility.GetCurrentRealTime()
-    if _trackedActor && now - _lastTrackingCheck >= 5.0
+    if _trackingConfirmed && now - _lastTrackingCheck >= 5.0
         _lastTrackingCheck = now
-        if _trackedActor.IsDead() || _trackedActor.IsDisabled() || _trackedActor.IsDeleted()
-            Debug.Trace("[NirnCommand] Tracking target invalid ref=" + _trackedActor.GetFormID())
+        Quest tracking = TrackingQuest()
+        ReferenceAlias targetAlias
+        if tracking
+            targetAlias = tracking.GetAlias(0) as ReferenceAlias
+        endif
+        if !_trackedActor || _trackedActor.IsDead() || _trackedActor.IsDisabled() || _trackedActor.IsDeleted() || !tracking || !targetAlias || targetAlias.GetActorRef() != _trackedActor || !tracking.IsRunning() || !tracking.IsActive() || !tracking.IsObjectiveDisplayed(10)
+            Debug.Trace("[NirnCommand] Tracking target or quest is no longer valid")
             _trackingEpoch += 1
             CleanupTracking()
             PublishTracking()
@@ -257,6 +264,7 @@ Function Connect()
             return
         endif
         _catalogSession = _viewGeneration + "-" + _epoch + "-" + Utility.GetCurrentRealTime()
+        _trackingLastUIRequest = 0
         _worldContext = 0
         _worldRevision = 0
         _locationRevision = 0
@@ -722,6 +730,7 @@ Function CleanupTracking()
         tracking.Stop()
     endif
     _trackedActor = None
+    _trackingConfirmed = false
     if SKSE.GetPluginVersion("NirnCommandNative") >= 0
         NirnCommandNative.ClearTrackingResolution(0)
     endif
@@ -732,7 +741,7 @@ Function PublishTracking()
         return
     endif
     int formId = 0
-    if _trackedActor
+    if _trackingConfirmed && _trackedActor
         formId = _trackedActor.GetFormID()
     endif
     Magelight.Call(_viewId, "ncTrackingState", _catalogSession + "|" + formId)
@@ -764,7 +773,7 @@ Function TrackNPC(int token, int context, string request, string session, int vi
         status = NirnCommandNative.TrackingResolutionStatus(nativeRequest)
         attempts += 1
     endwhile
-    if status != 1 || operation != _trackingEpoch || session != _catalogSession || viewGeneration != _viewGeneration || context != NirnCommandNative.WorldContext()
+    if status != 1 || operation != _trackingEpoch || session != _catalogSession || viewGeneration != _viewGeneration || context != NirnCommandNative.WorldContext() || Magelight.IsUIModeActive()
         Debug.Trace("[NirnCommand] Tracking invalid or stale request=" + request + " status=" + status)
         NirnCommandNative.ClearTrackingResolution(nativeRequest)
         return
@@ -794,6 +803,7 @@ Function TrackNPC(int token, int context, string request, string session, int vi
         Debug.Trace("[NirnCommand] Tracking replacement request=" + request + " old=" + _trackedActor.GetFormID() + " new=" + candidate.GetFormID())
     endif
     _trackedActor = None
+    _trackingConfirmed = false
     tracking.SetObjectiveDisplayed(10, false)
     tracking.SetActive(false)
     targetAlias.Clear()
@@ -808,7 +818,7 @@ Function TrackNPC(int token, int context, string request, string session, int vi
             return
         endif
     endif
-    if operation != _trackingEpoch || session != _catalogSession || viewGeneration != _viewGeneration || context != NirnCommandNative.WorldContext()
+    if operation != _trackingEpoch || session != _catalogSession || viewGeneration != _viewGeneration || context != NirnCommandNative.WorldContext() || Magelight.IsUIModeActive()
         Debug.Trace("[NirnCommand] Tracking rejected stale startup request=" + request)
         if operation == _trackingEpoch || !_trackingBusy || _trackingOwner == operation
             CleanupTracking()
@@ -835,6 +845,7 @@ Function TrackNPC(int token, int context, string request, string session, int vi
         return
     endif
     _trackedActor = candidate
+    _trackingConfirmed = true
     Debug.Trace("[NirnCommand] Tracking objective active request=" + request + " ref=" + candidate.GetFormID())
     PublishTracking()
 EndFunction
@@ -850,7 +861,9 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
         if separator > 0
             int token = StringUtil.Substring(arguments, 0, separator) as int
             string request = StringUtil.Substring(arguments, separator + 1)
-            if token != 0 && request != "" && !_trackingBusy && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
+            int requestNumber = request as int
+            if token != 0 && requestNumber > _trackingLastUIRequest && !_trackingBusy && Magelight.IsUIModeActive() && Magelight.GetUIModeView() == _viewId
+                _trackingLastUIRequest = requestNumber
                 _trackingEpoch += 1
                 int operation = _trackingEpoch
                 _trackingOwner = operation
@@ -869,10 +882,20 @@ Event OnWorld(string eventName, string payload, float numArg, Form sender)
     string stopPrefix = "stop-tracking|" + _catalogSession + "|" + _worldContext + "|"
     if _worldContext > 0 && StringUtil.Find(payload, stopPrefix) == 0
         string request = StringUtil.Substring(payload, StringUtil.GetLength(stopPrefix))
+        int requestNumber = request as int
+        if requestNumber <= _trackingLastUIRequest || !Magelight.IsUIModeActive() || Magelight.GetUIModeView() != _viewId
+            Debug.Trace("[NirnCommand] Tracking rejected stale cancellation request=" + request)
+            return
+        endif
+        _trackingLastUIRequest = requestNumber
         _trackingEpoch += 1
         Debug.Trace("[NirnCommand] Tracking cancellation request=" + request)
         CleanupTracking()
         PublishTracking()
+        return
+    endif
+    if StringUtil.Find(payload, "track|") == 0 || StringUtil.Find(payload, "stop-tracking|") == 0
+        Debug.Trace("[NirnCommand] Tracking rejected stale request=" + payload)
         return
     endif
     string npcAck = "applied|" + _catalogSession + "|" + _worldContext + "|npc|" + NirnCommandNative.WorldRevision() + "|" + _npcAttempt
