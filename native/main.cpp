@@ -303,6 +303,5 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
     }
     SKSE::log::info("Nirn Command native initializing");
     nirn::world_runtime::initialize();
-    nirn::hotkey_runtime::initialize();
     return SKSE::GetPapyrusInterface()->Register(RegisterPapyrus);
 }

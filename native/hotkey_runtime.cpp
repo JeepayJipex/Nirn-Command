@@ -67,11 +67,18 @@ public:
     }
 } sink;
 
+}
+
 void message(SKSE::MessagingInterface::Message* message)
 {
     if (!message) return;
     if (message->type == SKSE::MessagingInterface::kInputLoaded) {
-        if (auto manager = RE::BSInputDeviceManager::GetSingleton()) manager->AddEventSink(&sink);
+        if (auto manager = RE::BSInputDeviceManager::GetSingleton()) {
+            manager->AddEventSink(&sink);
+            SKSE::log::info("Hotkey input listener registered");
+        } else {
+            SKSE::log::error("Hotkey input listener unavailable: input manager missing");
+        }
     }
     if (message->type == SKSE::MessagingInterface::kPreLoadGame || message->type == SKSE::MessagingInterface::kNewGame) {
         std::scoped_lock lock(mutex);
@@ -79,9 +86,6 @@ void message(SKSE::MessagingInterface::Message* message)
         state.reset(keys[keyCode] || physicallyPressed(keyCode));
     }
 }
-}
-
-void initialize() { SKSE::GetMessagingInterface()->RegisterListener(message); }
 void configure(RE::StaticFunctionTag*, std::int32_t key, std::int32_t modifiers)
 {
     std::scoped_lock lock(mutex);
@@ -90,6 +94,7 @@ void configure(RE::StaticFunctionTag*, std::int32_t key, std::int32_t modifiers)
     const int modifierKeys[] = {42, 54, 29, 157, 56, 184};
     for (int modifier : modifierKeys) keys[modifier] = physicallyPressed(modifier);
     state.reset(keys[keyCode] || physicallyPressed(keyCode));
+    SKSE::log::info("Hotkey configured key={} modifiers={} armed={}", keyCode, expectedModifiers, state.armed());
 }
 void ready(RE::StaticFunctionTag*, bool value, std::int32_t view)
 {
@@ -97,6 +102,7 @@ void ready(RE::StaticFunctionTag*, bool value, std::int32_t view)
     available = value;
     viewId = value ? view : 0;
     if (!value) state.reset(keys[keyCode] || physicallyPressed(keyCode));
+    SKSE::log::info("Hotkey readiness ready={} view={}", available, viewId);
 }
 bool consume(RE::StaticFunctionTag*, std::int32_t token)
 {

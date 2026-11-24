@@ -90,3 +90,12 @@ function connectFixture() {
   assert.deepEqual(f.calls, []);
 }
 console.log('View connection rejects stale save generations.');
+
+const nativeMain = fs.readFileSync('native/main.cpp', 'utf8');
+const nativeWorld = fs.readFileSync('native/world_runtime.cpp', 'utf8');
+const nativeHotkey = fs.readFileSync('native/hotkey_runtime.cpp', 'utf8');
+assert.match(nativeMain, /nirn::world_runtime::initialize\(\)/);
+assert.match(nativeWorld, /void message\(SKSE::MessagingInterface::Message\* msg\)\s*\{\s*nirn::hotkey_runtime::message\(msg\)/);
+assert.match(nativeHotkey, /kInputLoaded[\s\S]*?AddEventSink\(&sink\)/);
+assert.doesNotMatch(nativeHotkey, /RegisterListener\s*\(/);
+console.log('SKSE lifecycle messages reach the hotkey input listener.');
