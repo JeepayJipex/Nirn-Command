@@ -25,11 +25,11 @@ window.ncWorldComplete('session|1|npc|1|1');
 sent.length=0;
 search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
 search('Test Actor'); enter(); assert.deepEqual(sent.pop(),['world','track|session|1|9|1']);
-window.ncTrackingState('old| -16777215'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
-window.ncTrackingState('session|-16777215'); search('Test Actor'); assert.equal(results.children[0].children[1].children[1].textContent,'Tracked · nearby');
+window.ncTrackingState('old|1|-16777215'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
+window.ncTrackingState('session|2|-16777215'); window.ncTrackingState('session|1|0'); search('Test Actor'); assert.equal(results.children[0].children[1].children[1].textContent,'Tracked · nearby');
 search('Stop tracking NPC'); assert.equal(results.children[0].children[1].children[0].textContent,'Stop tracking NPC'); enter(); assert.deepEqual(sent.pop(),['world','stop-tracking|session|1|2']);
-window.ncTrackingState('session|0'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
-window.ncTrackingState('session|123'); window.ncGameLoaded('new-session'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
-window.ncTrackingState('session|123'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
+window.ncTrackingState('session|3|0'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
+window.ncTrackingState('session|4|123'); window.ncGameLoaded('new-session'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
+window.ncTrackingState('session|5|123'); search('Stop tracking NPC'); assert.equal(results.children[0].textContent,'No results.');
 console.log('Tracking UI state, request routing and save isolation passed.');
 

@@ -46,6 +46,7 @@ float _npcSentAt
 float _locationSentAt
 int _trackingEpoch
 int _trackingLastUIRequest
+int _trackingRevision
 int _trackingOwner
 bool _trackingBusy
 Actor _trackedActor
@@ -743,7 +744,8 @@ Function PublishTracking()
     if _trackingConfirmed && _trackedActor
         formId = _trackedActor.GetFormID()
     endif
-    Magelight.Call(_viewId, "ncTrackingState", _catalogSession + "|" + formId)
+    _trackingRevision += 1
+    Magelight.Call(_viewId, "ncTrackingState", _catalogSession + "|" + _trackingRevision + "|" + formId)
 EndFunction
 
 Function TrackNPC(int token, int context, string request, string session, int viewGeneration, int operation)

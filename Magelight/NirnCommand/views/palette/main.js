@@ -176,7 +176,7 @@
   const categories=['All','Actions','Items','Spells','NPCs','Locations'];
   const worldCatalog=window.NirnWorldCatalog?.create();
   let worldContext='', worldNpcs=[], worldLocations=[], indexedNpcs=null, indexedLocations=null, worldRequest=null;
-  let trackedForm='';
+  let trackedForm='', trackingRevision=0;
   const stopTracking={id:'tracking:stop',label:'Stop tracking NPC',kind:'Action',action:'local:stop-tracking',transient:true};
   function cancelWorldRequest() {
     if (!worldRequest) return;
@@ -331,10 +331,12 @@
     if (bridge) bridge.send('catalog',catalogSession ? 'snapshot|'+catalogSession : 'snapshot');
   }
   function catalogFrame(value) {const text=String(value); if(!catalogSession) return text; const prefix=catalogSession+'|'; return text.startsWith(prefix)?text.slice(prefix.length):null;}
-  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackedForm=''; indexedStatics=false; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
+  window.ncGameLoaded = function(value) { catalogTransferSerial++; catalogRetries=0; spellReceivedEpoch=''; catalogAttempt=0; catalogTransferKey=''; catalogSession=value==='new' ? Date.now().toString(36)+'-'+Math.random().toString(36).slice(2) : String(value || ''); worldContext=''; worldNpcs=[]; worldLocations=[]; worldRequest=null; trackedForm=''; trackingRevision=0; indexedStatics=false; worldCatalog?.reset(catalogSession,worldContext); modDiscovered=[]; incomingMods=[]; discovered=[]; incoming=[]; epoch=''; pending={}; capabilities=null; render(); };
   window.ncTrackingState = function(payload) {
-    const [session,form]=String(payload).split('|');
-    if(!session || session!==catalogSession || !/^-?\d+$/.test(form)) return;
+    const [session,revision,form]=String(payload).split('|');
+    const version=Number(revision);
+    if(!session || session!==catalogSession || !Number.isSafeInteger(version) || version<=trackingRevision || !/^-?\d+$/.test(form)) return;
+    trackingRevision=version;
     const id=Number(form) >>> 0;
     trackedForm=id ? String(id) : '';
     indexedStatics=false;
