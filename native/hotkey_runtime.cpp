@@ -13,19 +13,19 @@ bool available = false;
 int viewId = 0;
 std::array<bool, 256> keys{};
 
-bool pressed(int key)
+bool physicallyPressed(int key)
 {
     if (key < 0 || key >= static_cast<int>(keys.size())) return false;
     const unsigned scan = (key & 0x7f) | ((key & 0x80) ? 0xe000 : 0);
     const auto virtualKey = MapVirtualKeyW(scan, MAPVK_VSC_TO_VK_EX);
-    return keys[key] || (virtualKey && (GetAsyncKeyState(virtualKey) & 0x8000));
+    return virtualKey && (GetAsyncKeyState(virtualKey) & 0x8000);
 }
 
 int modifiers()
 {
     int result = 0;
     const int modifierKeys[] = {42, 54, 29, 157, 56, 184};
-    for (int i = 0; i < 6; ++i) if (keys[modifierKeys[i]]) result |= 1 << i;
+    for (int i = 0; i < 6; ++i) if (keys[modifierKeys[i]] || physicallyPressed(modifierKeys[i])) result |= 1 << i;
     return result;
 }
 
@@ -76,7 +76,7 @@ void message(SKSE::MessagingInterface::Message* message)
     if (message->type == SKSE::MessagingInterface::kPreLoadGame || message->type == SKSE::MessagingInterface::kNewGame) {
         std::scoped_lock lock(mutex);
         available = false;
-        state.reset(pressed(keyCode));
+        state.reset(keys[keyCode] || physicallyPressed(keyCode));
     }
 }
 }
@@ -87,14 +87,16 @@ void configure(RE::StaticFunctionTag*, std::int32_t key, std::int32_t modifiers)
     std::scoped_lock lock(mutex);
     keyCode = key;
     expectedModifiers = modifiers;
-    state.reset(pressed(keyCode));
+    const int modifierKeys[] = {42, 54, 29, 157, 56, 184};
+    for (int modifier : modifierKeys) keys[modifier] = physicallyPressed(modifier);
+    state.reset(keys[keyCode] || physicallyPressed(keyCode));
 }
 void ready(RE::StaticFunctionTag*, bool value, std::int32_t view)
 {
     std::scoped_lock lock(mutex);
     available = value;
     viewId = value ? view : 0;
-    if (!value) state.reset(pressed(keyCode));
+    if (!value) state.reset(keys[keyCode] || physicallyPressed(keyCode));
 }
 bool consume(RE::StaticFunctionTag*, std::int32_t token)
 {
@@ -104,11 +106,11 @@ bool consume(RE::StaticFunctionTag*, std::int32_t token)
 void recover(RE::StaticFunctionTag*)
 {
     std::scoped_lock lock(mutex);
-    const unsigned scan = (keyCode & 0x7f) | ((keyCode & 0x80) ? 0xe000 : 0);
-    const auto virtualKey = MapVirtualKeyW(scan, MAPVK_VSC_TO_VK_EX);
-    if (virtualKey && !(GetAsyncKeyState(virtualKey) & 0x8000)) {
+    if (!physicallyPressed(keyCode)) {
         keys[keyCode] = false;
         state.up();
     }
+    const int modifierKeys[] = {42, 54, 29, 157, 56, 184};
+    for (int modifier : modifierKeys) if (!physicallyPressed(modifier)) keys[modifier] = false;
 }
 }
